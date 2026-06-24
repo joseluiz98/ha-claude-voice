@@ -1,0 +1,9 @@
+{
+  "domain": "claude_voice",
+  "name": "Claude Voice (Jarvis)",
+  "version": "0.1.0",
+  "documentation": "https://github.com/joseluiz98/ha-claude-voice",
+  "dependencies": ["http", "websocket_api", "frontend", "panel_custom"],
+  "codeowners": [],
+  "iot_class": "local_push"
+}

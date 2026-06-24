@@ -1,0 +1,6 @@
+"""Constantes do component claude_voice (Jarvis Logbook)."""
+DOMAIN = "claude_voice"
+DEFAULT_CONV_DIR = "/share/claude-voice/conversations"
+PANEL_URL_PATH = "jarvis-logbook"
+PANEL_WEBCOMPONENT = "jarvis-logbook"
+STATIC_URL = "/api/claude_voice/static"
