@@ -1,5 +1,5 @@
 import {
-  resolveUserName, fmtDuration, fmtTime, applyFilters, computeStats,
+  resolveUserName, fmtDuration, fmtTime, applyFilters, computeStats, groupByThread,
 } from "./format.js";
 
 class JarvisLogbook extends HTMLElement {
@@ -11,6 +11,7 @@ class JarvisLogbook extends HTMLElement {
     this._unreadable = 0;
     this._date = new Date().toISOString().slice(0, 10);
     this._filters = {};
+    this._grouped = false;
     this._selected = null;
     this._visibleCache = [];
   }
@@ -93,6 +94,7 @@ class JarvisLogbook extends HTMLElement {
       <select id="jl-mode"><option value="">modo: todos</option><option value="power">power</option><option value="fast">fast</option></select>
       <select id="jl-status"><option value="">status: todos</option><option value="ok">ok</option><option value="error">erro</option></select>
       <input type="text" id="jl-q" placeholder="buscar prompt/resposta…">
+      <label style="font-size:13px"><input type="checkbox" id="jl-group"> 🧵 agrupar conversa</label>
       <span class="live" id="jl-live"></span>`;
     const setDate = (v) => { this._date = v; this.querySelector("#jl-date").value = v; this._load(); };
     this.querySelector("#jl-prev").onclick = () => setDate(this._shift(-1));
@@ -101,6 +103,7 @@ class JarvisLogbook extends HTMLElement {
     this.querySelector("#jl-mode").onchange = (e) => { this._filters.mode = e.target.value || undefined; this._renderBody(); };
     this.querySelector("#jl-status").onchange = (e) => { this._filters.status = e.target.value || undefined; this._renderBody(); };
     this.querySelector("#jl-q").oninput = (e) => { this._filters.query = e.target.value || undefined; this._renderBody(); };
+    this.querySelector("#jl-group").onchange = (e) => { this._grouped = e.target.checked; this._renderBody(); };
   }
 
   _shift(n) {
@@ -114,6 +117,27 @@ class JarvisLogbook extends HTMLElement {
     const um = this._um();
     const recs = applyFilters(this._records, this._filters);
     this._visibleCache = recs;
+    if (this._grouped) {
+      const threads = groupByThread(recs);
+      this.querySelector("#jl-list").innerHTML = threads.map((t) => {
+        const head = t.records[0] || {};
+        const inner = t.records.map((r, i) => `
+          <tr data-tk="${this._esc(t.sessionId)}" data-i="${i}" class="${r.ok ? "" : "err"}">
+            <td style="padding-left:18px">${fmtTime(r.ts)}</td>
+            <td class="trunc">${this._esc(r.prompt)}</td>
+            <td class="trunc">${this._esc(r.response || (r.error ? "erro: " + r.error : ""))}</td>
+            <td>${fmtDuration(r.durationMs)}</td>
+          </tr>`).join("");
+        return `<table><thead><tr><th colspan="4">🧵 ${this._esc(resolveUserName(head.sessionKey, um))} ·
+          ${fmtTime(head.ts)} · ${t.records.length} turno(s) · <small>${this._esc(t.sessionId)}</small></th></tr></thead>
+          <tbody>${inner}</tbody></table>`;
+      }).join("") || "<p>Sem interações neste dia.</p>";
+      this.querySelectorAll("#jl-list tbody tr").forEach((tr) => {
+        const t = groupByThread(this._visibleCache).find((x) => x.sessionId === tr.dataset.tk);
+        if (t) tr.onclick = () => this._select(t.records[Number(tr.dataset.i)]);
+      });
+      return;
+    }
     const s = computeStats(recs);
     this.querySelector("#jl-stats").innerHTML = [
       ["interações", s.total], ["erros", s.errors], ["média", fmtDuration(s.avgMs)],
