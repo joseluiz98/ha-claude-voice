@@ -1,0 +1,13 @@
+# Segredos / runtime — NUNCA versionar
+config.json
+mcp-voice.json
+conversations/
+backups/
+logs/
+*.pid
+restart.flag
+.sdd-progress.md
+# Caches
+__pycache__/
+*.pyc
+node_modules/
