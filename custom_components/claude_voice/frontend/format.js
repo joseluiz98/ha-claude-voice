@@ -43,11 +43,6 @@ export function applyFilters(records, f = {}) {
       const hay = ((r.prompt || "") + " " + (r.response || "")).toLowerCase();
       if (!hay.includes(q)) return false;
     }
-    if (f.timeFrom || f.timeTo) {
-      const hhmm = fmtTime(r.ts);
-      if (f.timeFrom && hhmm < f.timeFrom) return false;
-      if (f.timeTo && hhmm > f.timeTo) return false;
-    }
     return true;
   });
 }

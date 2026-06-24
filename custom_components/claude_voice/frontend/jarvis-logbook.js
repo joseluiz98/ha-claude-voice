@@ -26,7 +26,15 @@ class JarvisLogbook extends HTMLElement {
     this._load();
     this._hass.connection
       .subscribeEvents((ev) => this._onLive(ev.data), "claude_voice_conversation")
-      .then((unsub) => { this._unsub = unsub; });
+      .then((unsub) => { this._unsub = unsub; })
+      .catch(() => {
+        // Sem realtime: degrada para um botão "atualizar" manual (spec §7).
+        const live = this.querySelector("#jl-live");
+        if (!live) return;
+        live.innerHTML = '<button id="jl-refresh" title="realtime indisponível">↻ atualizar</button>';
+        const b = this.querySelector("#jl-refresh");
+        if (b) b.onclick = () => this._load();
+      });
   }
   get hass() { return this._hass; }
 

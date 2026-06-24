@@ -9,7 +9,7 @@ import homeassistant.util.dt as dt_util
 from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
 
-from .const import DOMAIN
+from .const import DEFAULT_CONV_DIR, DOMAIN
 from .conversations import list_conversations, list_conversations_range
 
 
@@ -36,7 +36,7 @@ async def ws_list_conversations(hass, connection, msg) -> None:
     hoje, TZ local).
     """
     store = hass.data.get(DOMAIN, {})
-    base = store.get("conversations_dir")
+    base = store.get("conversations_dir") or DEFAULT_CONV_DIR
     if msg.get("from") and msg.get("to"):
         # Expande ±1 dia UTC: o cliente filtra pela data LOCAL, e um dia local
         # cruza dois arquivos UTC. O buffer garante cobertura das bordas.
