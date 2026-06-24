@@ -17,6 +17,7 @@ from .const import (
     PANEL_URL_PATH,
     PANEL_WEBCOMPONENT,
     STATIC_URL,
+    VERSION,
 )
 from .ws_api import async_register_ws
 
@@ -52,7 +53,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         hass,
         frontend_url_path=PANEL_URL_PATH,
         webcomponent_name=PANEL_WEBCOMPONENT,
-        module_url=f"{STATIC_URL}/jarvis-logbook.js",
+        module_url=f"{STATIC_URL}/jarvis-logbook.js?v={VERSION}",
         sidebar_title="Jarvis Logbook",
         sidebar_icon="mdi:robot-happy",
         require_admin=True,
