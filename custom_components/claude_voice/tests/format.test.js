@@ -1,8 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  resolveUserName, fmtDuration, applyFilters, computeStats, groupByThread,
+  resolveUserName, fmtDuration, localISODate, applyFilters, computeStats, groupByThread,
 } from "../frontend/format.js";
+
+test("localISODate retorna YYYY-MM-DD local e trata inválido", () => {
+  // meio-dia UTC: a data local coincide com a UTC em qualquer fuso realista
+  assert.equal(localISODate("2026-06-24T12:00:00Z"), "2026-06-24");
+  assert.equal(localISODate("lixo"), "");
+});
 
 test("resolveUserName mapeia e faz fallback", () => {
   assert.equal(resolveUserName("abc", { abc: "José" }), "José");

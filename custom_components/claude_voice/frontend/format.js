@@ -15,6 +15,23 @@ export function fmtTime(ts) {
   return d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 }
 
+export function fmtDate(ts) {
+  const d = new Date(ts);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+}
+
+// Data LOCAL (fuso do navegador) como "YYYY-MM-DD", comparável lexicograficamente.
+// Usada para filtrar por range de data local, já que o ts é UTC mas a exibição é local.
+export function localISODate(ts) {
+  const d = new Date(ts);
+  if (isNaN(d.getTime())) return "";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 export function applyFilters(records, f = {}) {
   return records.filter((r) => {
     if (f.user && r.sessionKey !== f.user) return false;

@@ -1,5 +1,6 @@
 import {
-  resolveUserName, fmtDuration, fmtTime, applyFilters, computeStats, groupByThread,
+  resolveUserName, fmtDuration, fmtTime, fmtDate, localISODate,
+  applyFilters, computeStats, groupByThread,
 } from "./format.js";
 
 class JarvisLogbook extends HTMLElement {
@@ -9,7 +10,8 @@ class JarvisLogbook extends HTMLElement {
     this._inited = false;
     this._records = [];
     this._unreadable = 0;
-    this._date = new Date().toISOString().slice(0, 10);
+    this._from = localISODate(Date.now());
+    this._to = this._from;
     this._filters = {};
     this._grouped = false;
     this._selected = null;
@@ -31,11 +33,21 @@ class JarvisLogbook extends HTMLElement {
 
   async _load() {
     try {
+      const lo = this._from <= this._to ? this._from : this._to;
+      const hi = this._from <= this._to ? this._to : this._from;
       const res = await this._hass.connection.sendMessagePromise({
         type: "claude_voice/list_conversations",
-        date: this._date,
+        from: lo,
+        to: hi,
       });
-      this._records = (res.records || []).sort((a, b) => (b.ts > a.ts ? 1 : b.ts < a.ts ? -1 : 0));
+      // O WS devolve um superset (±1 dia UTC nas bordas). Filtra pela data LOCAL
+      // de cada registro, tornando a data local autoritativa para o range exibido.
+      this._records = (res.records || [])
+        .filter((r) => {
+          const ld = localISODate(r.ts);
+          return ld && ld >= lo && ld <= hi;
+        })
+        .sort((a, b) => (b.ts > a.ts ? 1 : b.ts < a.ts ? -1 : 0));
       this._unreadable = res.unreadable || 0;
     } catch (e) {
       this._records = [];
@@ -200,28 +212,19 @@ class JarvisLogbook extends HTMLElement {
   _buildFilters() {
     const f = this.querySelector("#jl-filters");
     f.innerHTML = `
-      <button id="jl-prev" title="dia anterior">‹</button>
-      <input type="date" id="jl-date" value="${this._date}">
-      <button id="jl-next" title="próximo dia">›</button>
+      <span class="rng">de</span><input type="date" id="jl-from" value="${this._from}">
+      <span class="rng">até</span><input type="date" id="jl-to" value="${this._to}">
       <select id="jl-mode"><option value="">modo: todos</option><option value="power">power</option><option value="fast">fast</option></select>
       <select id="jl-status"><option value="">status: todos</option><option value="ok">ok</option><option value="error">erro</option></select>
       <input type="text" id="jl-q" placeholder="buscar prompt/resposta…">
       <label><input type="checkbox" id="jl-group"> 🧵 agrupar conversa</label>
       <span class="live" id="jl-live"></span>`;
-    const setDate = (v) => { this._date = v; this.querySelector("#jl-date").value = v; this._load(); };
-    this.querySelector("#jl-prev").onclick = () => setDate(this._shift(-1));
-    this.querySelector("#jl-next").onclick = () => setDate(this._shift(1));
-    this.querySelector("#jl-date").onchange = (e) => setDate(e.target.value);
+    this.querySelector("#jl-from").onchange = (e) => { this._from = e.target.value; this._load(); };
+    this.querySelector("#jl-to").onchange = (e) => { this._to = e.target.value; this._load(); };
     this.querySelector("#jl-mode").onchange = (e) => { this._filters.mode = e.target.value || undefined; this._renderBody(); };
     this.querySelector("#jl-status").onchange = (e) => { this._filters.status = e.target.value || undefined; this._renderBody(); };
     this.querySelector("#jl-q").oninput = (e) => { this._filters.query = e.target.value || undefined; this._renderBody(); };
     this.querySelector("#jl-group").onchange = (e) => { this._grouped = e.target.checked; this._renderBody(); };
-  }
-
-  _shift(n) {
-    const d = new Date(this._date + "T12:00:00");
-    d.setDate(d.getDate() + n);
-    return d.toISOString().slice(0, 10);
   }
 
   _renderBody() {
@@ -259,6 +262,7 @@ class JarvisLogbook extends HTMLElement {
 
     const rows = recs.map((r, i) => `
       <tr data-i="${i}" class="${r.ok ? "" : "err"} ${this._selected === r ? "sel" : ""}">
+        <td><span class="mono">${fmtDate(r.ts)}</span></td>
         <td><span class="mono">${fmtTime(r.ts)}</span></td>
         <td>${this._esc(resolveUserName(r.sessionKey, um))}</td>
         <td class="trunc">${this._esc(r.prompt)}</td>
@@ -269,7 +273,7 @@ class JarvisLogbook extends HTMLElement {
       </tr>`).join("");
     const note = this._unreadable ? `<p class="note">${this._unreadable} linha(s) ilegíveis ignoradas</p>` : "";
     this.querySelector("#jl-list").innerHTML = recs.length
-      ? `<table><thead><tr><th>Hora</th><th>Usuário</th><th>Prompt</th><th>Resposta</th><th>Modo</th><th>⏱</th><th>✓</th></tr></thead><tbody>${rows}</tbody></table>${note}`
+      ? `<table><thead><tr><th>Data</th><th>Hora</th><th>Usuário</th><th>Prompt</th><th>Resposta</th><th>Modo</th><th>⏱</th><th>✓</th></tr></thead><tbody>${rows}</tbody></table>${note}`
       : `<p class="empty">Sem interações neste dia.</p>${note}`;
     this.querySelectorAll("#jl-list tbody tr").forEach((tr) => {
       tr.onclick = () => this._select(this._visibleCache[Number(tr.dataset.i)]);

@@ -44,6 +44,34 @@ class TestParse(unittest.TestCase):
             out = conv.list_conversations(d, "2026-06-24")
             self.assertEqual(set(out.keys()), {"records", "unreadable", "dates_available"})
 
+    def test_read_range_concats_inclusive(self):
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, "2026-06-23.ndjson"), "w", encoding="utf-8") as fh:
+                fh.write('{"ts":"2026-06-23T10:00:00Z"}\n')
+            with open(os.path.join(d, "2026-06-24.ndjson"), "w", encoding="utf-8") as fh:
+                fh.write('{"ts":"2026-06-24T10:00:00Z"}\nbroken\n')
+            records, unreadable = conv.read_range(d, "2026-06-23", "2026-06-24")
+            self.assertEqual(len(records), 2)
+            self.assertEqual(unreadable, 1)
+
+    def test_read_range_swaps_inverted_dates(self):
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, "2026-06-23.ndjson"), "w", encoding="utf-8") as fh:
+                fh.write('{"ts":"2026-06-23T10:00:00Z"}\n')
+            records, _ = conv.read_range(d, "2026-06-24", "2026-06-23")
+            self.assertEqual(len(records), 1)
+
+    def test_read_range_missing_days_ok(self):
+        with tempfile.TemporaryDirectory() as d:
+            records, unreadable = conv.read_range(d, "2026-06-01", "2026-06-03")
+            self.assertEqual((records, unreadable), ([], 0))
+
+    def test_read_range_caps_window(self):
+        with tempfile.TemporaryDirectory() as d:
+            # janela de ~2 anos é clampada a MAX_RANGE_DAYS sem estourar
+            records, unreadable = conv.read_range(d, "2024-01-01", "2026-01-01")
+            self.assertEqual((records, unreadable), ([], 0))
+
 
 if __name__ == "__main__":
     unittest.main()
