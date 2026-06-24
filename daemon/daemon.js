@@ -137,7 +137,21 @@ function logConversation(entry) {
     const exists = fs.existsSync(file);
     fs.appendFileSync(file, JSON.stringify(entry) + '\n');
     if (!exists) fs.chmodSync(file, 0o600);
+    try { emitConversationEvent(entry); } catch (_) {}
   } catch (_) {}
+}
+
+// Emite evento HA com o registro recém-gravado (realtime do Jarvis Logbook). Best-effort.
+function emitConversationEvent(entry) {
+  const token = process.env.SUPERVISOR_TOKEN || process.env.HASSIO_TOKEN;
+  if (!token) return;
+  const payload = JSON.stringify(entry);
+  const req = http.request({
+    host: 'supervisor', method: 'POST', path: '/core/api/events/claude_voice_conversation',
+    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
+  }, r => { r.resume(); if (r.statusCode >= 300) log('CONV-EVENT http', r.statusCode); });
+  req.on('error', e => log('CONV-EVENT err:', e.message));
+  req.write(payload); req.end();
 }
 
 function send(res, code, obj) {

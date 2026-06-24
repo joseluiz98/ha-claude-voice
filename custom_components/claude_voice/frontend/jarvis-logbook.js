@@ -24,6 +24,9 @@ class JarvisLogbook extends HTMLElement {
     this._inited = true;
     this._render();
     this._load();
+    this._hass.connection
+      .subscribeEvents((ev) => this._onLive(ev.data), "claude_voice_conversation")
+      .then((unsub) => { this._unsub = unsub; });
   }
   get hass() { return this._hass; }
 
@@ -311,6 +314,26 @@ class JarvisLogbook extends HTMLElement {
       this._renderBody();
     };
     this._renderBody();
+  }
+
+  _onLive(rec) {
+    if (!rec) return;
+    const lo = this._from <= this._to ? this._from : this._to;
+    const hi = this._from <= this._to ? this._to : this._from;
+    const ld = localISODate(rec.ts);
+    if (!ld || ld < lo || ld > hi) return;
+    this._records.unshift(rec);
+    this._renderBody();
+    const live = this.querySelector("#jl-live");
+    if (live) {
+      live.textContent = "ao vivo";
+      clearTimeout(this._liveT);
+      this._liveT = setTimeout(() => { live.textContent = ""; }, 2500);
+    }
+  }
+
+  disconnectedCallback() {
+    if (this._unsub) { this._unsub(); this._unsub = null; }
   }
 }
 customElements.define("jarvis-logbook", JarvisLogbook);

@@ -1,7 +1,7 @@
 {
   "domain": "claude_voice",
   "name": "Claude Voice (Jarvis)",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "documentation": "https://github.com/joseluiz98/ha-claude-voice",
   "dependencies": ["http", "websocket_api", "frontend", "panel_custom"],
   "codeowners": [],
