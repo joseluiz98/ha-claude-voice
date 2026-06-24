@@ -18,6 +18,7 @@ from .const import (
     PANEL_WEBCOMPONENT,
     STATIC_URL,
 )
+from .ws_api import async_register_ws
 
 CONFIG_SCHEMA = vol.Schema(
     {
@@ -44,6 +45,8 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     await hass.http.async_register_static_paths(
         [StaticPathConfig(STATIC_URL, str(frontend_dir), False)]
     )
+
+    async_register_ws(hass)
 
     await panel_custom.async_register_panel(
         hass,
