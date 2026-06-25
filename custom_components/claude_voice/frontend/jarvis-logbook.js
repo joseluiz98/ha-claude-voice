@@ -3,6 +3,10 @@ import {
   applyFilters, computeStats, groupByThread,
 } from "./format.js";
 
+function shortToolName(name) {
+  return name.replace(/^mcp__[^_]+__/, '');
+}
+
 class JarvisLogbook extends HTMLElement {
   constructor() {
     super();
@@ -205,6 +209,32 @@ class JarvisLogbook extends HTMLElement {
           }
           @keyframes jl-sheet { from { transform:translateY(100%); } to { transform:none; } }
         }
+        .jl .detail .d-trace {
+          display: flex; flex-direction: column; gap: 0;
+          border: 1px solid var(--jl-border); border-radius: 9px; overflow: hidden;
+        }
+        .jl .detail .d-trace-step {
+          display: grid; grid-template-columns: 22px 1fr;
+          gap: 0 6px; padding: 5px 10px; align-items: baseline;
+          border-bottom: 1px solid color-mix(in srgb, var(--jl-border) 50%, transparent);
+          font-family: var(--jl-mono); font-size: 11px; transition: background .1s;
+        }
+        .jl .detail .d-trace-step:last-child { border-bottom: none; }
+        .jl .detail .d-trace-step:hover {
+          background: color-mix(in srgb, var(--jl-accent) 6%, transparent);
+        }
+        .jl .detail .d-trace-n {
+          color: var(--jl-accent); font-weight: 700; font-size: 10px;
+          text-align: right; padding-top: 1px; opacity: .7;
+        }
+        .jl .detail .d-trace-name {
+          color: var(--jl-text); font-weight: 600; font-size: 11px; line-height: 1.35;
+        }
+        .jl .detail .d-trace-sum {
+          grid-column: 2; color: var(--jl-dim); font-size: 10px;
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+          line-height: 1.3; opacity: .75;
+        }
       </style>
       <div class="jl">
         <div class="toolbar">
@@ -309,10 +339,22 @@ class JarvisLogbook extends HTMLElement {
       <h4>Prompt</h4><div class="d-body">${this._esc(r.prompt)}</div>
       <h4>Resposta</h4><div class="d-body">${this._esc(r.response || "")}</div>
       ${r.error ? `<h4>Erro</h4><div class="d-body" style="color:var(--jl-err)">${this._esc(r.error)}</div>` : ""}
+      ${r.tools && r.tools.length ? `
+        <h4>Raciocínio · ${r.tools.length} chamada${r.tools.length !== 1 ? "s" : ""}</h4>
+        <div class="d-trace">
+          ${r.tools.map((t, i) => `
+            <div class="d-trace-step">
+              <span class="d-trace-n">${i + 1}</span>
+              <span class="d-trace-name">${this._esc(shortToolName(t.name))}</span>
+              ${t.summary ? `<span class="d-trace-sum">${this._esc(t.summary)}</span>` : ""}
+            </div>`).join("")}
+        </div>` : ""}
       <h4>Metadados</h4>
       <div class="meta">
         dispositivo: <b>${this._esc(r.speakTarget)}</b><br>
         warmState: <b>${this._esc(r.warmState)}</b><br>
+        ${r.turnNumber != null ? `turno: <b>${this._esc(r.turnNumber)}</b><br>` : ""}
+        ${r.resumed != null ? `sessão: <b>${r.resumed ? "retomada" : "nova"}</b><br>` : ""}
         sessionId: <b>${this._esc(r.sessionId)}</b><br>
         ts: <b>${this._esc(r.ts)}</b>
       </div>`;
