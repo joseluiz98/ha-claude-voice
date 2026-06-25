@@ -40,4 +40,16 @@ function nextBackoffMs(attempts, schedule) {
   return schedule[i];
 }
 
-module.exports = { buildUserMessage, parseResultEvent, classifyClaudeError, shouldReset, nextBackoffMs };
+function extractToolSummary(name, input) {
+  if (!input || typeof input !== 'object') return '';
+  if (typeof input.command === 'string') return input.command.slice(0, 90);
+  if (typeof input.file_path === 'string') return input.file_path.slice(0, 90);
+  if (typeof input.pattern === 'string') return input.pattern.slice(0, 90);
+  const haFields = ['entity_id', 'domain', 'area_id', 'device_id', 'query'];
+  for (const f of haFields) {
+    if (typeof input[f] === 'string') return input[f].slice(0, 90);
+  }
+  return JSON.stringify(input).slice(0, 90);
+}
+
+module.exports = { buildUserMessage, parseResultEvent, classifyClaudeError, shouldReset, nextBackoffMs, extractToolSummary };

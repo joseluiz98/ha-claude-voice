@@ -11,6 +11,7 @@ class WarmClaude {
     this.state = 'starting'; // starting|online|failed|usage_limited|auth_expired
     this.turns = 0; this.startedAt = 0; this.lastTurnAt = 0;
     this.lastRespawnReason = null; this.limitWindow = null; this.limitResetsAt = null;
+    this._currentTools = []; this._mcpServers = [];
   }
 
   start() {
@@ -42,15 +43,29 @@ class WarmClaude {
       const cls = H.classifyClaudeError(j);
       if (cls && this.current) { this._handleError(cls); continue; }
       const res = H.parseResultEvent(j);
-      if (res && this.current) this._completeTurn(res);
+      if (res && this.current) { this._completeTurn(res); continue; }
+      if (j.type === 'system' && j.mcp_servers) {
+        this._mcpServers = j.mcp_servers.map(s => s.name || s);
+      }
+      if (j.type === 'assistant' && Array.isArray(j.message && j.message.content)) {
+        for (const block of j.message.content) {
+          if (block.type === 'tool_use') {
+            this._currentTools.push({
+              name: block.name,
+              summary: H.extractToolSummary(block.name, block.input),
+            });
+          }
+        }
+      }
     }
   }
 
   _completeTurn(res) {
     const cur = this.current; this.current = null;
     clearTimeout(cur.timer);
+    const turnNumber = this.turns + 1;
     this.turns++; this.lastTurnAt = Date.now(); this._failures = 0;
-    cur.resolve({ result: res.result, sessionId: res.sessionId, durationMs: Date.now() - cur.start });
+    cur.resolve({ result: res.result, sessionId: res.sessionId, durationMs: Date.now() - cur.start, tools: [...this._currentTools], turnNumber });
     this._drain();
   }
 
@@ -139,6 +154,7 @@ class WarmClaude {
       this._drain();
     }, q.turnTimeoutMs);
     this.current = { resolve: q.resolve, reject: q.reject, timer, start };
+    this._currentTools = [];
     this.child.stdin.write(H.buildUserMessage(q.prompt));
   }
 

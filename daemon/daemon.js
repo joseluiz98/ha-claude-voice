@@ -279,6 +279,7 @@ function handleAsk(j, respond) {
   const target = (j.speakTarget || 'alexa_media_last_called').toString();
   const key = j.sessionKey ? j.sessionKey.toString() : null;
   const resumeId = getSession(key);
+  const resumed = !!resumeId;
   const t0 = Date.now();
   metrics.requestsTotal++; metrics.lastRequestAt = new Date().toISOString(); metrics.busy++;
   log('ASK:', wait ? '[wait]' : '[async]', key ? `key=${key.slice(0,8)}` : '', JSON.stringify(prompt).slice(0, 160));
@@ -289,14 +290,14 @@ function handleAsk(j, respond) {
     const w = warm.getStatus();
     if (e) {
       metrics.errorsTotal++; metrics.lastError = e.message; log('ERR:', e.message, `(${durationMs}ms)`); postHeartbeat();
-      if (!dryRun) logConversation({ ts: new Date(t0).toISOString(), prompt, response: null, ok: false, error: e.message, durationMs, sessionKey: key, sessionId: null, speakTarget: target, warmState: w.state, mode: CFG.mode || 'fast' });
+      if (!dryRun) logConversation({ ts: new Date(t0).toISOString(), prompt, response: null, ok: false, error: e.message, durationMs, sessionKey: key, sessionId: null, speakTarget: target, warmState: w.state, mode: CFG.mode || 'fast', tools: [], turnNumber: null, resumed });
       if (!wait && speakBack) speak(target, 'Desculpa, tive um problema ao processar seu pedido.');
       if (wait) respond(500, { ok: false, error: e.message, durationMs });
       return;
     }
     setSession(key, data.sessionId);
     log('OK:', `(${durationMs}ms)`, JSON.stringify(data.result).slice(0, 160)); postHeartbeat();
-    if (!dryRun) logConversation({ ts: new Date(t0).toISOString(), prompt, response: data.result, ok: true, error: null, durationMs, sessionKey: key, sessionId: data.sessionId, speakTarget: target, warmState: w.state, mode: CFG.mode || 'fast' });
+    if (!dryRun) logConversation({ ts: new Date(t0).toISOString(), prompt, response: data.result, ok: true, error: null, durationMs, sessionKey: key, sessionId: data.sessionId, speakTarget: target, warmState: w.state, mode: CFG.mode || 'fast', tools: data.tools || [], turnNumber: data.turnNumber ?? null, resumed });
     if (!wait && speakBack) speak(target, forSpeech(data.result));
     if (wait) respond(200, { ok: true, result: data.result, sessionId: data.sessionId, durationMs });
   };
@@ -304,7 +305,7 @@ function handleAsk(j, respond) {
   // async puro: confirma na hora, processa depois
   if (!wait) respond(202, { ok: true, accepted: true });
   warm.ask(prompt, j.timeoutMs || CFG.turnTimeoutMs)
-    .then(data => finish(null, { result: data.result, sessionId: data.sessionId }))
+    .then(data => finish(null, { result: data.result, sessionId: data.sessionId, tools: data.tools || [], turnNumber: data.turnNumber ?? null }))
     .catch(err => finish(err));
 }
 
