@@ -1,6 +1,6 @@
 import {
   resolveUserName, fmtDuration, fmtTime, fmtDate, localISODate,
-  applyFilters, computeStats, groupByThread,
+  applyFilters, computeStats, groupByThread, presetRange, monthMatrix,
 } from "./format.js";
 
 function shortToolName(name) {
@@ -206,6 +206,34 @@ class JarvisLogbook extends HTMLElement {
         .jl .detail .meta { font-family:var(--jl-mono); font-size:var(--jl-fs-sm); line-height:1.85; color:var(--jl-dim); word-break:break-all; }
         .jl .detail .meta b { color:var(--jl-text); font-weight:600; }
 
+        .jl .rp { position:relative; display:inline-block; }
+        .jl .rp-field {
+          font:inherit; font-size:var(--jl-fs); padding:6px 11px; cursor:pointer;
+          border:1px solid var(--jl-border); border-radius:9px; background:var(--jl-surface); color:var(--jl-text);
+        }
+        .jl .rp-pop {
+          position:absolute; z-index:30; top:calc(100% + 6px); left:0; display:flex; gap:0;
+          border:1px solid var(--jl-border); border-radius:14px; background:var(--jl-surface);
+          box-shadow:0 12px 40px -12px rgba(0,0,0,.45); overflow:hidden;
+        }
+        .jl .rp-pop.hidden { display:none; }
+        .jl .rp-presets { display:flex; flex-direction:column; padding:8px; gap:2px; border-right:1px solid var(--jl-border); min-width:130px; }
+        .jl .rp-presets button {
+          font:inherit; font-size:var(--jl-fs); text-align:left; padding:7px 12px; cursor:pointer;
+          border:none; border-radius:8px; background:transparent; color:var(--jl-text);
+        }
+        .jl .rp-presets button:hover { background:color-mix(in srgb, var(--jl-accent) 12%, transparent); }
+        .jl .rp-cal { padding:12px 14px; }
+        .jl .rp-cal-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; font-weight:600; }
+        .jl .rp-cal-head button { font:inherit; cursor:pointer; border:none; background:transparent; color:var(--jl-text); font-size:var(--jl-fs-lg); width:32px; height:32px; border-radius:8px; }
+        .jl .rp-grid { display:grid; grid-template-columns:repeat(7,34px); gap:2px; }
+        .jl .rp-grid .dow { text-align:center; font-size:var(--jl-fs-xs); color:var(--jl-dim); padding-bottom:4px; }
+        .jl .rp-grid .cell { text-align:center; padding:7px 0; border-radius:8px; cursor:pointer; font-size:var(--jl-fs); }
+        .jl .rp-grid .cell.out { color:var(--jl-dim); opacity:.5; }
+        .jl .rp-grid .cell:hover { background:color-mix(in srgb, var(--jl-accent) 14%, transparent); }
+        .jl .rp-grid .cell.in { background:color-mix(in srgb, var(--jl-accent) 16%, transparent); }
+        .jl .rp-grid .cell.edge { background:var(--jl-accent); color:#fff; }
+
         @container (max-width: 760px) {
           .jl .wrap { flex-direction:column; }
           .jl .trunc { max-width:46vw; }
@@ -261,19 +289,102 @@ class JarvisLogbook extends HTMLElement {
   _buildFilters() {
     const f = this.querySelector("#jl-filters");
     f.innerHTML = `
-      <span class="rng">de</span><input type="date" id="jl-from" value="${this._from}">
-      <span class="rng">até</span><input type="date" id="jl-to" value="${this._to}">
+      <span id="jl-range"></span>
       <select id="jl-mode"><option value="">modo: todos</option><option value="power">power</option><option value="fast">fast</option></select>
       <select id="jl-status"><option value="">status: todos</option><option value="ok">ok</option><option value="error">erro</option></select>
       <input type="text" id="jl-q" placeholder="buscar prompt/resposta…">
       <label><input type="checkbox" id="jl-group"> 🧵 agrupar conversa</label>
       <span class="live" id="jl-live"></span>`;
-    this.querySelector("#jl-from").onchange = (e) => { this._from = e.target.value; this._load(); };
-    this.querySelector("#jl-to").onchange = (e) => { this._to = e.target.value; this._load(); };
     this.querySelector("#jl-mode").onchange = (e) => { this._filters.mode = e.target.value || undefined; this._renderBody(); };
     this.querySelector("#jl-status").onchange = (e) => { this._filters.status = e.target.value || undefined; this._renderBody(); };
     this.querySelector("#jl-q").oninput = (e) => { this._filters.query = e.target.value || undefined; this._renderBody(); };
     this.querySelector("#jl-group").onchange = (e) => { this._grouped = e.target.checked; this._renderBody(); };
+    this._mountRangePickerReplica();
+  }
+
+  _mountRangePickerReplica() {
+    const host = this.querySelector("#jl-range");
+    if (!host) return;
+    this._calY = Number(this._to.slice(0, 4));
+    this._calM = Number(this._to.slice(5, 7)) - 1;
+    this._pick = null; // 1º clique de um novo range
+    host.innerHTML = `<div class="rp">
+      <button class="rp-field" id="rp-field"></button>
+      <div class="rp-pop hidden" id="rp-pop"></div>
+    </div>`;
+    this._renderRpField();
+    this.querySelector("#rp-field").onclick = (e) => {
+      e.stopPropagation();
+      const pop = this.querySelector("#rp-pop");
+      pop.classList.toggle("hidden");
+      if (!pop.classList.contains("hidden")) this._renderRpPop();
+    };
+    document.addEventListener("click", (e) => {
+      const pop = this.querySelector("#rp-pop");
+      if (pop && !pop.classList.contains("hidden") && !host.contains(e.target)) pop.classList.add("hidden");
+    });
+  }
+
+  _renderRpField() {
+    const f = this.querySelector("#rp-field");
+    if (f) f.textContent = this._from === this._to ? this._from : `${this._from} → ${this._to}`;
+  }
+
+  _renderRpPop() {
+    const pop = this.querySelector("#rp-pop");
+    const presets = [["today","Hoje"],["yesterday","Ontem"],["week","Esta semana"],
+      ["month","Este mês"],["last7","Últimos 7 dias"],["last30","Últimos 30 dias"]];
+    const weeks = monthMatrix(this._calY, this._calM);
+    const dow = ["S","T","Q","Q","S","S","D"];
+    const monName = new Date(this._calY, this._calM, 1)
+      .toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+    const lo = this._from <= this._to ? this._from : this._to;
+    const hi = this._from <= this._to ? this._to : this._from;
+    pop.innerHTML = `
+      <div class="rp-presets">${presets.map(([k,l]) =>
+        `<button data-k="${k}">${l}</button>`).join("")}</div>
+      <div class="rp-cal">
+        <div class="rp-cal-head"><button data-nav="-1">‹</button><span>${monName}</span><button data-nav="1">›</button></div>
+        <div class="rp-grid">
+          ${dow.map((d) => `<span class="dow">${d}</span>`).join("")}
+          ${weeks.flat().map((d) => {
+            const iso = localISODate(d);
+            const out = d.getMonth() !== this._calM ? "out" : "";
+            const edge = (iso === lo || iso === hi) ? "edge" : "";
+            const inr = (!edge && iso > lo && iso < hi) ? "in" : "";
+            return `<span class="cell ${out} ${inr} ${edge}" data-iso="${iso}">${d.getDate()}</span>`;
+          }).join("")}
+        </div>
+      </div>`;
+    pop.querySelectorAll(".rp-presets button").forEach((b) => {
+      b.onclick = () => {
+        const r = presetRange(b.dataset.k);
+        this._from = r.from; this._to = r.to; this._pick = null;
+        this._renderRpField(); this._renderRpPop(); this._load();
+        pop.classList.add("hidden");
+      };
+    });
+    pop.querySelectorAll("[data-nav]").forEach((b) => {
+      b.onclick = () => {
+        this._calM += Number(b.dataset.nav);
+        if (this._calM < 0) { this._calM = 11; this._calY--; }
+        if (this._calM > 11) { this._calM = 0; this._calY++; }
+        this._renderRpPop();
+      };
+    });
+    pop.querySelectorAll(".cell").forEach((c) => {
+      c.onclick = () => {
+        const iso = c.dataset.iso;
+        if (this._pick == null) { this._pick = iso; this._from = iso; this._to = iso; }
+        else {
+          this._from = this._pick <= iso ? this._pick : iso;
+          this._to = this._pick <= iso ? iso : this._pick;
+          this._pick = null;
+          this._load(); pop.classList.add("hidden");
+        }
+        this._renderRpField(); this._renderRpPop();
+      };
+    });
   }
 
   _renderBody() {
