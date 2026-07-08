@@ -319,10 +319,13 @@ class JarvisLogbook extends HTMLElement {
       pop.classList.toggle("hidden");
       if (!pop.classList.contains("hidden")) this._renderRpPop();
     };
-    document.addEventListener("click", (e) => {
+    if (this._rpOutside) document.removeEventListener("click", this._rpOutside);
+    this._rpOutside = (e) => {
       const pop = this.querySelector("#rp-pop");
-      if (pop && !pop.classList.contains("hidden") && !host.contains(e.target)) pop.classList.add("hidden");
-    });
+      const host = this.querySelector("#jl-range");
+      if (pop && !pop.classList.contains("hidden") && host && !host.contains(e.target)) pop.classList.add("hidden");
+    };
+    document.addEventListener("click", this._rpOutside);
   }
 
   _renderRpField() {
@@ -357,7 +360,8 @@ class JarvisLogbook extends HTMLElement {
         </div>
       </div>`;
     pop.querySelectorAll(".rp-presets button").forEach((b) => {
-      b.onclick = () => {
+      b.onclick = (e) => {
+        e.stopPropagation();
         const r = presetRange(b.dataset.k);
         this._from = r.from; this._to = r.to; this._pick = null;
         this._renderRpField(); this._renderRpPop(); this._load();
@@ -365,7 +369,8 @@ class JarvisLogbook extends HTMLElement {
       };
     });
     pop.querySelectorAll("[data-nav]").forEach((b) => {
-      b.onclick = () => {
+      b.onclick = (e) => {
+        e.stopPropagation();
         this._calM += Number(b.dataset.nav);
         if (this._calM < 0) { this._calM = 11; this._calY--; }
         if (this._calM > 11) { this._calM = 0; this._calY++; }
@@ -373,7 +378,8 @@ class JarvisLogbook extends HTMLElement {
       };
     });
     pop.querySelectorAll(".cell").forEach((c) => {
-      c.onclick = () => {
+      c.onclick = (e) => {
+        e.stopPropagation();
         const iso = c.dataset.iso;
         if (this._pick == null) { this._pick = iso; this._from = iso; this._to = iso; }
         else {
@@ -503,6 +509,7 @@ class JarvisLogbook extends HTMLElement {
 
   disconnectedCallback() {
     if (this._unsub) { this._unsub(); this._unsub = null; }
+    if (this._rpOutside) { document.removeEventListener("click", this._rpOutside); this._rpOutside = null; }
   }
 }
 customElements.define("jarvis-logbook", JarvisLogbook);
