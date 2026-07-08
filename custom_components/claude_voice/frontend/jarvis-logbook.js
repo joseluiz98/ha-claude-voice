@@ -86,6 +86,7 @@ class JarvisLogbook extends HTMLElement {
     this.innerHTML = `
       <style>
         jarvis-logbook { display:block; }
+        :root.jl-sheet-open, html.jl-sheet-open body { overflow:hidden !important; }
         .jl {
           --jl-mono: ui-monospace, "SF Mono", SFMono-Regular, "JetBrains Mono", "Roboto Mono", Menlo, Consolas, monospace;
           --jl-accent: var(--primary-color, #2f6df6);
@@ -205,6 +206,8 @@ class JarvisLogbook extends HTMLElement {
         .jl .detail .d-body { font-size:var(--jl-fs); line-height:1.5; white-space:pre-wrap; word-break:break-word; }
         .jl .detail .meta { font-family:var(--jl-mono); font-size:var(--jl-fs-sm); line-height:1.85; color:var(--jl-dim); word-break:break-all; }
         .jl .detail .meta b { color:var(--jl-text); font-weight:600; }
+        .jl .scrim { display:none; }
+        .jl .detail .d-grip { display:none; }
 
         .jl .rp { position:relative; display:inline-block; }
         .jl .rp-field {
@@ -243,6 +246,17 @@ class JarvisLogbook extends HTMLElement {
             animation:jl-sheet .22s ease both;
           }
           @keyframes jl-sheet { from { transform:translateY(100%); } to { transform:none; } }
+          .jl .scrim {
+            position:fixed; inset:0; z-index:19; background:rgba(0,0,0,.5);
+            -webkit-backdrop-filter:blur(1px); backdrop-filter:blur(1px);
+            touch-action:none; animation:jl-fade .18s ease both;
+          }
+          .jl .scrim.hidden { display:none; }
+          .jl .detail { touch-action:none; overscroll-behavior:contain; }
+          .jl .detail .d-grip {
+            display:block; width:40px; height:4px; margin:-4px auto 10px; border-radius:999px;
+            background:var(--jl-border);
+          }
         }
         .jl .detail .d-trace {
           display: flex; flex-direction: column; gap: 0;
@@ -277,6 +291,7 @@ class JarvisLogbook extends HTMLElement {
           <div class="stats" id="jl-stats"></div>
           <div class="filters" id="jl-filters"></div>
         </div>
+        <div class="scrim hidden" id="jl-scrim"></div>
         <div class="wrap">
           <div class="list" id="jl-list"></div>
           <div class="detail hidden" id="jl-detail"></div>
@@ -414,8 +429,7 @@ class JarvisLogbook extends HTMLElement {
           <tbody>${inner}</tbody></table>`;
       }).join("") || `<p class="empty">Sem interações neste dia.</p>`;
       this.querySelectorAll("#jl-list tbody tr").forEach((tr) => {
-        const t = groupByThread(this._visibleCache).find((x) => x.sessionId === tr.dataset.tk);
-        if (t) tr.onclick = () => this._select(t.records[Number(tr.dataset.i)]);
+        tr.onclick = () => { this._markSelected(tr); const t = groupByThread(this._visibleCache).find((x) => x.sessionId === tr.dataset.tk); if (t) this._select(t.records[Number(tr.dataset.i)]); };
       });
       return;
     }
@@ -442,7 +456,7 @@ class JarvisLogbook extends HTMLElement {
       ? `<table><thead><tr><th>Data</th><th>Hora</th><th>Usuário</th><th>Prompt</th><th>Resposta</th><th>Modo</th><th>⏱</th><th>✓</th></tr></thead><tbody>${rows}</tbody></table>${note}`
       : `<p class="empty">Sem interações neste dia.</p>${note}`;
     this.querySelectorAll("#jl-list tbody tr").forEach((tr) => {
-      tr.onclick = () => this._select(this._visibleCache[Number(tr.dataset.i)]);
+      tr.onclick = () => { this._markSelected(tr); this._select(this._visibleCache[Number(tr.dataset.i)]); };
     });
   }
 
@@ -453,6 +467,7 @@ class JarvisLogbook extends HTMLElement {
     const d = this.querySelector("#jl-detail");
     d.classList.remove("hidden");
     d.innerHTML = `
+      <div class="d-grip"></div>
       <div class="d-head">
         <span class="mono">${fmtTime(r.ts)}</span>
         <span>${this._esc(resolveUserName(r.sessionKey, um))}</span>
@@ -483,12 +498,54 @@ class JarvisLogbook extends HTMLElement {
         sessionId: <b>${this._esc(r.sessionId)}</b><br>
         ts: <b>${this._esc(r.ts)}</b>
       </div>`;
-    this.querySelector("#jl-close").onclick = () => {
-      this._selected = null;
-      d.classList.add("hidden");
-      this._renderBody();
+    this.querySelector("#jl-close").onclick = () => this._closeSheet();
+    this._bindSheetDrag();
+    this._openSheet();
+  }
+
+  _markSelected(el) {
+    if (this._selEl) this._selEl.classList.remove("sel");
+    if (el) el.classList.add("sel");
+    this._selEl = el;
+  }
+
+  _openSheet() {
+    const sc = this.querySelector("#jl-scrim");
+    if (sc) { sc.classList.remove("hidden"); sc.onclick = () => this._closeSheet(); }
+    document.documentElement.classList.add("jl-sheet-open");
+  }
+
+  _closeSheet() {
+    this._selected = null;
+    const d = this.querySelector("#jl-detail");
+    if (d) { d.classList.add("hidden"); d.style.transform = ""; }
+    const sc = this.querySelector("#jl-scrim");
+    if (sc) sc.classList.add("hidden");
+    document.documentElement.classList.remove("jl-sheet-open");
+    if (this._selEl) { this._selEl.classList.remove("sel"); this._selEl = null; }
+  }
+
+  _bindSheetDrag() {
+    const d = this.querySelector("#jl-detail");
+    if (!d) return;
+    let startY = null, dy = 0;
+    const grip = d; // arrasta pela área toda do sheet no topo
+    const onStart = (e) => {
+      if (!e.touches || !e.touches.length) return;
+      startY = e.touches[0].clientY; dy = 0; d.style.transition = "none";
     };
-    this._renderBody();
+    const onMove = (e) => {
+      if (startY == null || !e.touches || !e.touches.length) return;
+      dy = e.touches[0].clientY - startY;
+      if (dy > 0) { d.style.transform = `translateY(${dy}px)`; }
+    };
+    const onEnd = () => {
+      d.style.transition = "";
+      if (dy > 90) { this._closeSheet(); }
+      else { d.style.transform = ""; }
+      startY = null; dy = 0;
+    };
+    grip.ontouchstart = onStart; grip.ontouchmove = onMove; grip.ontouchend = onEnd;
   }
 
   _onLive(rec) {
