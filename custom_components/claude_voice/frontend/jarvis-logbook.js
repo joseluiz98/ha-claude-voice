@@ -97,9 +97,16 @@ class JarvisLogbook extends HTMLElement {
           --jl-bg: var(--primary-background-color, #f5f6f8);
           --jl-text: var(--primary-text-color, #1c1f24);
           --jl-dim: var(--secondary-text-color, #8a929c);
+          /* escala tipográfica: base derivada dos tamanhos antigos × ~1.4, em rem */
+          --jl-fs-xs: 0.8rem;   /* ~13px  (antes 9–9.5px labels/th/h4/trace-n) */
+          --jl-fs-sm: 0.94rem;  /* ~15px  (antes 10.5–12px badge/mono/trace/live) */
+          --jl-fs: 1.13rem;     /* ~18px  (antes 13–13.5px corpo/tabela/filtros) */
+          --jl-fs-lg: 1.35rem;  /* ~22px  (antes 15–18px botões/close) */
+          --jl-fs-xl: 1.63rem;  /* ~26px  (antes 19px número das stats) */
           container-type: inline-size;
           font-family: var(--paper-font-body1_-_font-family, "Segoe UI", system-ui, sans-serif);
           color: var(--jl-text);
+          font-size: var(--jl-fs);
           animation: jl-fade .32s ease both;
         }
         @keyframes jl-fade { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
@@ -115,12 +122,12 @@ class JarvisLogbook extends HTMLElement {
           display:flex; flex-direction:column; min-width:74px; padding:9px 13px;
           border:1px solid var(--jl-border); border-radius:13px; background:var(--jl-surface);
         }
-        .jl .stat b { font-family:var(--jl-mono); font-size:19px; font-weight:650; letter-spacing:-.02em; line-height:1.05; }
-        .jl .stat small { margin-top:3px; font-size:9px; text-transform:uppercase; letter-spacing:.09em; color:var(--jl-dim); }
+        .jl .stat b { font-family:var(--jl-mono); font-size:var(--jl-fs-xl); font-weight:650; letter-spacing:-.02em; line-height:1.05; }
+        .jl .stat small { margin-top:3px; font-size:var(--jl-fs-xs); text-transform:uppercase; letter-spacing:.09em; color:var(--jl-dim); }
 
         .jl .filters { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:12px; }
         .jl .filters input, .jl .filters select {
-          font:inherit; font-size:13px; padding:6px 11px; color:var(--jl-text);
+          font:inherit; font-size:var(--jl-fs); padding:6px 11px; color:var(--jl-text);
           border:1px solid var(--jl-border); border-radius:9px; background:var(--jl-surface);
         }
         .jl .filters input:focus, .jl .filters select:focus {
@@ -129,15 +136,15 @@ class JarvisLogbook extends HTMLElement {
         }
         .jl .filters #jl-q { flex:1 1 180px; min-width:150px; }
         .jl .filters button {
-          font:inherit; font-family:var(--jl-mono); font-size:15px; line-height:1; cursor:pointer;
+          font:inherit; font-family:var(--jl-mono); font-size:var(--jl-fs-lg); line-height:1; cursor:pointer;
           width:32px; height:32px; color:var(--jl-text);
           border:1px solid var(--jl-border); border-radius:9px; background:var(--jl-surface);
           transition:background .12s, border-color .12s;
         }
         .jl .filters button:hover { background:color-mix(in srgb, var(--jl-accent) 12%, var(--jl-surface)); border-color:var(--jl-accent); }
-        .jl .filters label { display:inline-flex; align-items:center; gap:6px; font-size:13px; color:var(--jl-dim); cursor:pointer; }
+        .jl .filters label { display:inline-flex; align-items:center; gap:6px; font-size:var(--jl-fs); color:var(--jl-dim); cursor:pointer; }
         .jl .live {
-          margin-left:auto; font-family:var(--jl-mono); font-size:11px; font-weight:600;
+          margin-left:auto; font-family:var(--jl-mono); font-size:var(--jl-fs-sm); font-weight:600;
           color:var(--jl-ok); display:inline-flex; align-items:center; gap:6px; letter-spacing:.02em;
         }
         .jl .live:not(:empty)::before {
@@ -148,12 +155,12 @@ class JarvisLogbook extends HTMLElement {
 
         .jl .wrap { display:flex; gap:16px; align-items:flex-start; padding:8px 18px 28px; }
         .jl .list { flex:1; min-width:0; }
-        .jl p.empty, .jl p.note { color:var(--jl-dim); font-size:13px; padding:18px 4px; }
-        .jl p.note { padding:8px 4px 0; font-size:11.5px; }
+        .jl p.empty, .jl p.note { color:var(--jl-dim); font-size:var(--jl-fs); padding:18px 4px; }
+        .jl p.note { padding:8px 4px 0; font-size:var(--jl-fs-sm); }
 
-        .jl table { width:100%; border-collapse:separate; border-spacing:0; font-size:13px; }
+        .jl table { width:100%; border-collapse:separate; border-spacing:0; font-size:var(--jl-fs); }
         .jl thead th {
-          text-align:left; font-size:9.5px; font-weight:600; text-transform:uppercase; letter-spacing:.09em;
+          text-align:left; font-size:var(--jl-fs-xs); font-weight:600; text-transform:uppercase; letter-spacing:.09em;
           color:var(--jl-dim); padding:6px 11px 9px; border-bottom:1px solid var(--jl-border); white-space:nowrap;
         }
         .jl tbody td { padding:10px 11px; border-bottom:1px solid color-mix(in srgb, var(--jl-border) 55%, transparent); vertical-align:top; }
@@ -161,16 +168,16 @@ class JarvisLogbook extends HTMLElement {
         .jl tbody tr:hover { background:color-mix(in srgb, var(--jl-accent) 7%, transparent); }
         .jl tbody tr.err { background:color-mix(in srgb, var(--jl-err) 8%, transparent); box-shadow:inset 3px 0 0 var(--jl-err); }
         .jl tbody tr.sel { background:color-mix(in srgb, var(--jl-accent) 13%, transparent); box-shadow:inset 3px 0 0 var(--jl-accent); }
-        .jl .mono { font-family:var(--jl-mono); font-size:12px; color:var(--jl-dim); white-space:nowrap; }
-        .jl .trunc { max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .jl .mono { font-family:var(--jl-mono); font-size:var(--jl-fs-sm); color:var(--jl-dim); white-space:nowrap; }
+        .jl .trunc { max-width:22vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
         .jl thead th[colspan] {
-          font-family:var(--jl-mono); font-size:11px; text-transform:none; letter-spacing:0;
+          font-family:var(--jl-mono); font-size:var(--jl-fs-sm); text-transform:none; letter-spacing:0;
           color:var(--jl-text); padding-top:16px;
         }
         .jl thead th[colspan] small { color:var(--jl-dim); }
 
         .jl .badge {
-          display:inline-flex; font-family:var(--jl-mono); font-size:10.5px; font-weight:600; letter-spacing:.02em;
+          display:inline-flex; font-family:var(--jl-mono); font-size:var(--jl-fs-sm); font-weight:600; letter-spacing:.02em;
           padding:2px 9px; border-radius:999px; background:color-mix(in srgb, var(--jl-dim) 20%, transparent); color:var(--jl-dim);
         }
         .jl .badge.b-power { background:color-mix(in srgb, var(--jl-power) 18%, transparent); color:var(--jl-power); }
@@ -188,15 +195,15 @@ class JarvisLogbook extends HTMLElement {
         }
         @keyframes jl-slide { from { opacity:0; transform:translateX(10px); } to { opacity:1; transform:none; } }
         .jl .detail.hidden { display:none; }
-        .jl .detail .d-head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:13px; padding-bottom:12px; margin-bottom:6px; border-bottom:1px solid var(--jl-border); }
+        .jl .detail .d-head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:var(--jl-fs); padding-bottom:12px; margin-bottom:6px; border-bottom:1px solid var(--jl-border); }
         .jl .detail #jl-close {
-          margin-left:auto; cursor:pointer; font-size:18px; line-height:1; width:26px; height:26px; border-radius:7px;
+          margin-left:auto; cursor:pointer; font-size:var(--jl-fs-lg); line-height:1; width:26px; height:26px; border-radius:7px;
           border:1px solid var(--jl-border); background:transparent; color:var(--jl-dim); transition:background .12s, color .12s;
         }
         .jl .detail #jl-close:hover { background:color-mix(in srgb, var(--jl-err) 14%, transparent); color:var(--jl-err); border-color:var(--jl-err); }
-        .jl .detail h4 { margin:14px 0 5px; font-size:9.5px; text-transform:uppercase; letter-spacing:.09em; color:var(--jl-dim); }
-        .jl .detail .d-body { font-size:13.5px; line-height:1.5; white-space:pre-wrap; word-break:break-word; }
-        .jl .detail .meta { font-family:var(--jl-mono); font-size:11.5px; line-height:1.85; color:var(--jl-dim); word-break:break-all; }
+        .jl .detail h4 { margin:14px 0 5px; font-size:var(--jl-fs-xs); text-transform:uppercase; letter-spacing:.09em; color:var(--jl-dim); }
+        .jl .detail .d-body { font-size:var(--jl-fs); line-height:1.5; white-space:pre-wrap; word-break:break-word; }
+        .jl .detail .meta { font-family:var(--jl-mono); font-size:var(--jl-fs-sm); line-height:1.85; color:var(--jl-dim); word-break:break-all; }
         .jl .detail .meta b { color:var(--jl-text); font-weight:600; }
 
         @container (max-width: 760px) {
@@ -217,21 +224,21 @@ class JarvisLogbook extends HTMLElement {
           display: grid; grid-template-columns: 22px 1fr;
           gap: 0 6px; padding: 5px 10px; align-items: baseline;
           border-bottom: 1px solid color-mix(in srgb, var(--jl-border) 50%, transparent);
-          font-family: var(--jl-mono); font-size: 11px; transition: background .1s;
+          font-family: var(--jl-mono); font-size: var(--jl-fs-sm); transition: background .1s;
         }
         .jl .detail .d-trace-step:last-child { border-bottom: none; }
         .jl .detail .d-trace-step:hover {
           background: color-mix(in srgb, var(--jl-accent) 6%, transparent);
         }
         .jl .detail .d-trace-n {
-          color: var(--jl-accent); font-weight: 700; font-size: 10px;
+          color: var(--jl-accent); font-weight: 700; font-size: var(--jl-fs-xs);
           text-align: right; padding-top: 1px; opacity: .7;
         }
         .jl .detail .d-trace-name {
-          color: var(--jl-text); font-weight: 600; font-size: 11px; line-height: 1.35;
+          color: var(--jl-text); font-weight: 600; font-size: var(--jl-fs-sm); line-height: 1.35;
         }
         .jl .detail .d-trace-sum {
-          grid-column: 2; color: var(--jl-dim); font-size: 10px;
+          grid-column: 2; color: var(--jl-dim); font-size: var(--jl-fs-xs);
           white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
           line-height: 1.3; opacity: .75;
         }
