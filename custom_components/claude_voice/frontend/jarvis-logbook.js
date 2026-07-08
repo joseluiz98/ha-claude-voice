@@ -68,8 +68,7 @@ class JarvisLogbook extends HTMLElement {
       this._records = [];
       this._unreadable = 0;
     }
-    this._selected = null;
-    this.querySelector("#jl-detail").classList.add("hidden");
+    this._closeSheet();
     this._renderBody();
   }
 
@@ -86,7 +85,9 @@ class JarvisLogbook extends HTMLElement {
     this.innerHTML = `
       <style>
         jarvis-logbook { display:block; }
-        :root.jl-sheet-open, html.jl-sheet-open body { overflow:hidden !important; }
+        @media (max-width: 760px) {
+          :root.jl-sheet-open, html.jl-sheet-open body { overflow:hidden !important; }
+        }
         .jl {
           --jl-mono: ui-monospace, "SF Mono", SFMono-Regular, "JetBrains Mono", "Roboto Mono", Menlo, Consolas, monospace;
           --jl-accent: var(--primary-color, #2f6df6);
@@ -247,15 +248,16 @@ class JarvisLogbook extends HTMLElement {
           }
           @keyframes jl-sheet { from { transform:translateY(100%); } to { transform:none; } }
           .jl .scrim {
+            display:block;
             position:fixed; inset:0; z-index:19; background:rgba(0,0,0,.5);
             -webkit-backdrop-filter:blur(1px); backdrop-filter:blur(1px);
             touch-action:none; animation:jl-fade .18s ease both;
           }
           .jl .scrim.hidden { display:none; }
-          .jl .detail { touch-action:none; overscroll-behavior:contain; }
+          .jl .detail { overscroll-behavior:contain; }
           .jl .detail .d-grip {
             display:block; width:40px; height:4px; margin:-4px auto 10px; border-radius:999px;
-            background:var(--jl-border);
+            background:var(--jl-border); touch-action:none;
           }
         }
         .jl .detail .d-trace {
@@ -431,6 +433,7 @@ class JarvisLogbook extends HTMLElement {
       this.querySelectorAll("#jl-list tbody tr").forEach((tr) => {
         tr.onclick = () => { this._markSelected(tr); const t = groupByThread(this._visibleCache).find((x) => x.sessionId === tr.dataset.tk); if (t) this._select(t.records[Number(tr.dataset.i)]); };
       });
+      this._selEl = this.querySelector("#jl-list tr.sel") || null;
       return;
     }
     const s = computeStats(recs);
@@ -458,6 +461,7 @@ class JarvisLogbook extends HTMLElement {
     this.querySelectorAll("#jl-list tbody tr").forEach((tr) => {
       tr.onclick = () => { this._markSelected(tr); this._select(this._visibleCache[Number(tr.dataset.i)]); };
     });
+    this._selEl = this.querySelector("#jl-list tr.sel") || null;
   }
 
   _select(r) {
@@ -528,8 +532,9 @@ class JarvisLogbook extends HTMLElement {
   _bindSheetDrag() {
     const d = this.querySelector("#jl-detail");
     if (!d) return;
+    const grip = d.querySelector(".d-grip");
+    if (!grip) return;
     let startY = null, dy = 0;
-    const grip = d; // arrasta pela área toda do sheet no topo
     const onStart = (e) => {
       if (!e.touches || !e.touches.length) return;
       startY = e.touches[0].clientY; dy = 0; d.style.transition = "none";
