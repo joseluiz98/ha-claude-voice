@@ -102,7 +102,7 @@ export function monthMatrix(year, month) {
     }
     weeks.push(row);
   }
-  // remove última semana se toda fora do mês
-  if (weeks[5].every((d) => d.getMonth() !== month)) weeks.pop();
+  // remove semanas finais se totalmente fora do mês (pode haver mais de uma)
+  while (weeks.length && weeks[weeks.length - 1].every((d) => d.getMonth() !== month)) weeks.pop();
   return weeks;
 }

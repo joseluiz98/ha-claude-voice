@@ -69,3 +69,10 @@ test("monthMatrix: julho/2026 começa numa terça (seg-based)", () => {
   assert.equal(m[0][0].getDate(), 29);
   assert.equal(m[0][2].getDate(), 1);
 });
+
+test("monthMatrix: fevereiro/2021 cabe em 4 linhas (sem semana extra fora do mês)", () => {
+  const m = monthMatrix(2021, 1); // fevereiro (0-based)
+  assert.equal(m.length, 4);
+  assert.equal(m[0][0].getDate(), 1);   // 1/fev/2021 é segunda
+  assert.equal(m[3][6].getDate(), 28);  // termina em 28/fev (domingo)
+});

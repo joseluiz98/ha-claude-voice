@@ -420,7 +420,7 @@ class JarvisLogbook extends HTMLElement {
       this.querySelector("#jl-list").innerHTML = threads.map((t) => {
         const head = t.records[0] || {};
         const inner = t.records.map((r, i) => `
-          <tr data-tk="${this._esc(t.sessionId)}" data-i="${i}" class="${r.ok ? "" : "err"}">
+          <tr data-tk="${this._esc(t.sessionId)}" data-i="${i}" class="${r.ok ? "" : "err"} ${this._selected === r ? "sel" : ""}">
             <td><span class="mono" style="padding-left:14px">${fmtTime(r.ts)}</span></td>
             <td class="trunc">${this._esc(r.prompt)}</td>
             <td class="trunc">${this._esc(r.response || (r.error ? "erro: " + r.error : ""))}</td>
@@ -572,6 +572,8 @@ class JarvisLogbook extends HTMLElement {
   disconnectedCallback() {
     if (this._unsub) { this._unsub(); this._unsub = null; }
     if (this._rpOutside) { document.removeEventListener("click", this._rpOutside); this._rpOutside = null; }
+    document.documentElement.classList.remove("jl-sheet-open");
+    clearTimeout(this._liveT);
   }
 }
 customElements.define("jarvis-logbook", JarvisLogbook);
