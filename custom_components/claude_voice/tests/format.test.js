@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   resolveUserName, fmtDuration, localISODate, applyFilters, computeStats, groupByThread,
+  presetRange, monthMatrix,
 } from "../frontend/format.js";
 
 test("localISODate retorna YYYY-MM-DD local e trata inválido", () => {
@@ -53,4 +54,25 @@ test("groupByThread agrupa por sessionId", () => {
   const g = groupByThread(recs);
   assert.equal(g.length, 2);
   assert.equal(g.find((x) => x.sessionId === "A").records.length, 2);
+});
+
+test("presetRange: hoje e últimos 7 dias", () => {
+  const now = new Date(2026, 6, 8, 12, 0, 0); // 2026-07-08 local
+  assert.deepEqual(presetRange("today", now), { from: "2026-07-08", to: "2026-07-08" });
+  assert.deepEqual(presetRange("last7", now), { from: "2026-07-02", to: "2026-07-08" });
+});
+
+test("monthMatrix: julho/2026 começa numa terça (seg-based)", () => {
+  const m = monthMatrix(2026, 6); // month 0-based → julho
+  assert.equal(m[0].length, 7);
+  // 1 de julho/2026 é quarta; célula 0 = segunda anterior (29/jun)
+  assert.equal(m[0][0].getDate(), 29);
+  assert.equal(m[0][2].getDate(), 1);
+});
+
+test("monthMatrix: fevereiro/2021 cabe em 4 linhas (sem semana extra fora do mês)", () => {
+  const m = monthMatrix(2021, 1); // fevereiro (0-based)
+  assert.equal(m.length, 4);
+  assert.equal(m[0][0].getDate(), 1);   // 1/fev/2021 é segunda
+  assert.equal(m[3][6].getDate(), 28);  // termina em 28/fev (domingo)
 });

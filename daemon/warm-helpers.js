@@ -42,14 +42,18 @@ function nextBackoffMs(attempts, schedule) {
 
 function extractToolSummary(name, input) {
   if (!input || typeof input !== 'object') return '';
-  if (typeof input.command === 'string') return input.command.slice(0, 90);
-  if (typeof input.file_path === 'string') return input.file_path.slice(0, 90);
-  if (typeof input.pattern === 'string') return input.pattern.slice(0, 90);
+  const CAP = 200;
+  // Bash traz `description` (intenção legível) — muito mais útil que o comando cru.
+  if (typeof input.description === 'string' && input.description.trim())
+    return input.description.slice(0, CAP);
+  if (typeof input.command === 'string') return input.command.slice(0, CAP);
+  if (typeof input.file_path === 'string') return input.file_path.slice(0, CAP);
+  if (typeof input.pattern === 'string') return input.pattern.slice(0, CAP);
   const haFields = ['entity_id', 'domain', 'area_id', 'device_id', 'query'];
   for (const f of haFields) {
-    if (typeof input[f] === 'string') return input[f].slice(0, 90);
+    if (typeof input[f] === 'string') return input[f].slice(0, CAP);
   }
-  return JSON.stringify(input).slice(0, 90);
+  return JSON.stringify(input).slice(0, CAP);
 }
 
 module.exports = { buildUserMessage, parseResultEvent, classifyClaudeError, shouldReset, nextBackoffMs, extractToolSummary };

@@ -1,6 +1,6 @@
 import {
   resolveUserName, fmtDuration, fmtTime, fmtDate, localISODate,
-  applyFilters, computeStats, groupByThread,
+  applyFilters, computeStats, groupByThread, presetRange, monthMatrix,
 } from "./format.js";
 
 function shortToolName(name) {
@@ -68,8 +68,7 @@ class JarvisLogbook extends HTMLElement {
       this._records = [];
       this._unreadable = 0;
     }
-    this._selected = null;
-    this.querySelector("#jl-detail").classList.add("hidden");
+    this._closeSheet();
     this._renderBody();
   }
 
@@ -86,6 +85,9 @@ class JarvisLogbook extends HTMLElement {
     this.innerHTML = `
       <style>
         jarvis-logbook { display:block; }
+        @media (max-width: 760px) {
+          :root.jl-sheet-open, html.jl-sheet-open body { overflow:hidden !important; }
+        }
         .jl {
           --jl-mono: ui-monospace, "SF Mono", SFMono-Regular, "JetBrains Mono", "Roboto Mono", Menlo, Consolas, monospace;
           --jl-accent: var(--primary-color, #2f6df6);
@@ -97,9 +99,16 @@ class JarvisLogbook extends HTMLElement {
           --jl-bg: var(--primary-background-color, #f5f6f8);
           --jl-text: var(--primary-text-color, #1c1f24);
           --jl-dim: var(--secondary-text-color, #8a929c);
+          /* escala tipográfica: base derivada dos tamanhos antigos × ~1.4, em rem */
+          --jl-fs-xs: 0.8rem;   /* ~13px  (antes 9–9.5px labels/th/h4/trace-n) */
+          --jl-fs-sm: 0.94rem;  /* ~15px  (antes 10.5–12px badge/mono/trace/live) */
+          --jl-fs: 1.13rem;     /* ~18px  (antes 13–13.5px corpo/tabela/filtros) */
+          --jl-fs-lg: 1.35rem;  /* ~22px  (antes 15–18px botões/close) */
+          --jl-fs-xl: 1.63rem;  /* ~26px  (antes 19px número das stats) */
           container-type: inline-size;
           font-family: var(--paper-font-body1_-_font-family, "Segoe UI", system-ui, sans-serif);
           color: var(--jl-text);
+          font-size: var(--jl-fs);
           animation: jl-fade .32s ease both;
         }
         @keyframes jl-fade { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
@@ -115,12 +124,12 @@ class JarvisLogbook extends HTMLElement {
           display:flex; flex-direction:column; min-width:74px; padding:9px 13px;
           border:1px solid var(--jl-border); border-radius:13px; background:var(--jl-surface);
         }
-        .jl .stat b { font-family:var(--jl-mono); font-size:19px; font-weight:650; letter-spacing:-.02em; line-height:1.05; }
-        .jl .stat small { margin-top:3px; font-size:9px; text-transform:uppercase; letter-spacing:.09em; color:var(--jl-dim); }
+        .jl .stat b { font-family:var(--jl-mono); font-size:var(--jl-fs-xl); font-weight:650; letter-spacing:-.02em; line-height:1.05; }
+        .jl .stat small { margin-top:3px; font-size:var(--jl-fs-xs); text-transform:uppercase; letter-spacing:.09em; color:var(--jl-dim); }
 
         .jl .filters { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:12px; }
         .jl .filters input, .jl .filters select {
-          font:inherit; font-size:13px; padding:6px 11px; color:var(--jl-text);
+          font:inherit; font-size:var(--jl-fs); padding:6px 11px; color:var(--jl-text);
           border:1px solid var(--jl-border); border-radius:9px; background:var(--jl-surface);
         }
         .jl .filters input:focus, .jl .filters select:focus {
@@ -129,15 +138,15 @@ class JarvisLogbook extends HTMLElement {
         }
         .jl .filters #jl-q { flex:1 1 180px; min-width:150px; }
         .jl .filters button {
-          font:inherit; font-family:var(--jl-mono); font-size:15px; line-height:1; cursor:pointer;
+          font:inherit; font-family:var(--jl-mono); font-size:var(--jl-fs-lg); line-height:1; cursor:pointer;
           width:32px; height:32px; color:var(--jl-text);
           border:1px solid var(--jl-border); border-radius:9px; background:var(--jl-surface);
           transition:background .12s, border-color .12s;
         }
         .jl .filters button:hover { background:color-mix(in srgb, var(--jl-accent) 12%, var(--jl-surface)); border-color:var(--jl-accent); }
-        .jl .filters label { display:inline-flex; align-items:center; gap:6px; font-size:13px; color:var(--jl-dim); cursor:pointer; }
+        .jl .filters label { display:inline-flex; align-items:center; gap:6px; font-size:var(--jl-fs); color:var(--jl-dim); cursor:pointer; }
         .jl .live {
-          margin-left:auto; font-family:var(--jl-mono); font-size:11px; font-weight:600;
+          margin-left:auto; font-family:var(--jl-mono); font-size:var(--jl-fs-sm); font-weight:600;
           color:var(--jl-ok); display:inline-flex; align-items:center; gap:6px; letter-spacing:.02em;
         }
         .jl .live:not(:empty)::before {
@@ -148,12 +157,12 @@ class JarvisLogbook extends HTMLElement {
 
         .jl .wrap { display:flex; gap:16px; align-items:flex-start; padding:8px 18px 28px; }
         .jl .list { flex:1; min-width:0; }
-        .jl p.empty, .jl p.note { color:var(--jl-dim); font-size:13px; padding:18px 4px; }
-        .jl p.note { padding:8px 4px 0; font-size:11.5px; }
+        .jl p.empty, .jl p.note { color:var(--jl-dim); font-size:var(--jl-fs); padding:18px 4px; }
+        .jl p.note { padding:8px 4px 0; font-size:var(--jl-fs-sm); }
 
-        .jl table { width:100%; border-collapse:separate; border-spacing:0; font-size:13px; }
+        .jl table { width:100%; border-collapse:separate; border-spacing:0; font-size:var(--jl-fs); }
         .jl thead th {
-          text-align:left; font-size:9.5px; font-weight:600; text-transform:uppercase; letter-spacing:.09em;
+          text-align:left; font-size:var(--jl-fs-xs); font-weight:600; text-transform:uppercase; letter-spacing:.09em;
           color:var(--jl-dim); padding:6px 11px 9px; border-bottom:1px solid var(--jl-border); white-space:nowrap;
         }
         .jl tbody td { padding:10px 11px; border-bottom:1px solid color-mix(in srgb, var(--jl-border) 55%, transparent); vertical-align:top; }
@@ -161,16 +170,16 @@ class JarvisLogbook extends HTMLElement {
         .jl tbody tr:hover { background:color-mix(in srgb, var(--jl-accent) 7%, transparent); }
         .jl tbody tr.err { background:color-mix(in srgb, var(--jl-err) 8%, transparent); box-shadow:inset 3px 0 0 var(--jl-err); }
         .jl tbody tr.sel { background:color-mix(in srgb, var(--jl-accent) 13%, transparent); box-shadow:inset 3px 0 0 var(--jl-accent); }
-        .jl .mono { font-family:var(--jl-mono); font-size:12px; color:var(--jl-dim); white-space:nowrap; }
-        .jl .trunc { max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .jl .mono { font-family:var(--jl-mono); font-size:var(--jl-fs-sm); color:var(--jl-dim); white-space:nowrap; }
+        .jl .trunc { max-width:22vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
         .jl thead th[colspan] {
-          font-family:var(--jl-mono); font-size:11px; text-transform:none; letter-spacing:0;
+          font-family:var(--jl-mono); font-size:var(--jl-fs-sm); text-transform:none; letter-spacing:0;
           color:var(--jl-text); padding-top:16px;
         }
         .jl thead th[colspan] small { color:var(--jl-dim); }
 
         .jl .badge {
-          display:inline-flex; font-family:var(--jl-mono); font-size:10.5px; font-weight:600; letter-spacing:.02em;
+          display:inline-flex; font-family:var(--jl-mono); font-size:var(--jl-fs-sm); font-weight:600; letter-spacing:.02em;
           padding:2px 9px; border-radius:999px; background:color-mix(in srgb, var(--jl-dim) 20%, transparent); color:var(--jl-dim);
         }
         .jl .badge.b-power { background:color-mix(in srgb, var(--jl-power) 18%, transparent); color:var(--jl-power); }
@@ -188,16 +197,46 @@ class JarvisLogbook extends HTMLElement {
         }
         @keyframes jl-slide { from { opacity:0; transform:translateX(10px); } to { opacity:1; transform:none; } }
         .jl .detail.hidden { display:none; }
-        .jl .detail .d-head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:13px; padding-bottom:12px; margin-bottom:6px; border-bottom:1px solid var(--jl-border); }
+        .jl .detail .d-head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:var(--jl-fs); padding-bottom:12px; margin-bottom:6px; border-bottom:1px solid var(--jl-border); }
         .jl .detail #jl-close {
-          margin-left:auto; cursor:pointer; font-size:18px; line-height:1; width:26px; height:26px; border-radius:7px;
+          margin-left:auto; cursor:pointer; font-size:var(--jl-fs-lg); line-height:1; width:26px; height:26px; border-radius:7px;
           border:1px solid var(--jl-border); background:transparent; color:var(--jl-dim); transition:background .12s, color .12s;
         }
         .jl .detail #jl-close:hover { background:color-mix(in srgb, var(--jl-err) 14%, transparent); color:var(--jl-err); border-color:var(--jl-err); }
-        .jl .detail h4 { margin:14px 0 5px; font-size:9.5px; text-transform:uppercase; letter-spacing:.09em; color:var(--jl-dim); }
-        .jl .detail .d-body { font-size:13.5px; line-height:1.5; white-space:pre-wrap; word-break:break-word; }
-        .jl .detail .meta { font-family:var(--jl-mono); font-size:11.5px; line-height:1.85; color:var(--jl-dim); word-break:break-all; }
+        .jl .detail h4 { margin:14px 0 5px; font-size:var(--jl-fs-xs); text-transform:uppercase; letter-spacing:.09em; color:var(--jl-dim); }
+        .jl .detail .d-body { font-size:var(--jl-fs); line-height:1.5; white-space:pre-wrap; word-break:break-word; }
+        .jl .detail .meta { font-family:var(--jl-mono); font-size:var(--jl-fs-sm); line-height:1.85; color:var(--jl-dim); word-break:break-all; }
         .jl .detail .meta b { color:var(--jl-text); font-weight:600; }
+        .jl .scrim { display:none; }
+        .jl .detail .d-grip { display:none; }
+
+        .jl .rp { position:relative; display:inline-block; }
+        .jl .rp-field {
+          font:inherit; font-size:var(--jl-fs); padding:6px 11px; cursor:pointer;
+          border:1px solid var(--jl-border); border-radius:9px; background:var(--jl-surface); color:var(--jl-text);
+        }
+        .jl .rp-pop {
+          position:absolute; z-index:30; top:calc(100% + 6px); left:0; display:flex; gap:0;
+          border:1px solid var(--jl-border); border-radius:14px; background:var(--jl-surface);
+          box-shadow:0 12px 40px -12px rgba(0,0,0,.45); overflow:hidden;
+        }
+        .jl .rp-pop.hidden { display:none; }
+        .jl .rp-presets { display:flex; flex-direction:column; padding:8px; gap:2px; border-right:1px solid var(--jl-border); min-width:130px; }
+        .jl .rp-presets button {
+          font:inherit; font-size:var(--jl-fs); text-align:left; padding:7px 12px; cursor:pointer;
+          border:none; border-radius:8px; background:transparent; color:var(--jl-text);
+        }
+        .jl .rp-presets button:hover { background:color-mix(in srgb, var(--jl-accent) 12%, transparent); }
+        .jl .rp-cal { padding:12px 14px; }
+        .jl .rp-cal-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; font-weight:600; }
+        .jl .rp-cal-head button { font:inherit; cursor:pointer; border:none; background:transparent; color:var(--jl-text); font-size:var(--jl-fs-lg); width:32px; height:32px; border-radius:8px; }
+        .jl .rp-grid { display:grid; grid-template-columns:repeat(7,34px); gap:2px; }
+        .jl .rp-grid .dow { text-align:center; font-size:var(--jl-fs-xs); color:var(--jl-dim); padding-bottom:4px; }
+        .jl .rp-grid .cell { text-align:center; padding:7px 0; border-radius:8px; cursor:pointer; font-size:var(--jl-fs); }
+        .jl .rp-grid .cell.out { color:var(--jl-dim); opacity:.5; }
+        .jl .rp-grid .cell:hover { background:color-mix(in srgb, var(--jl-accent) 14%, transparent); }
+        .jl .rp-grid .cell.in { background:color-mix(in srgb, var(--jl-accent) 16%, transparent); }
+        .jl .rp-grid .cell.edge { background:var(--jl-accent); color:#fff; }
 
         @container (max-width: 760px) {
           .jl .wrap { flex-direction:column; }
@@ -208,6 +247,18 @@ class JarvisLogbook extends HTMLElement {
             animation:jl-sheet .22s ease both;
           }
           @keyframes jl-sheet { from { transform:translateY(100%); } to { transform:none; } }
+          .jl .scrim {
+            display:block;
+            position:fixed; inset:0; z-index:19; background:rgba(0,0,0,.5);
+            -webkit-backdrop-filter:blur(1px); backdrop-filter:blur(1px);
+            touch-action:none; animation:jl-fade .18s ease both;
+          }
+          .jl .scrim.hidden { display:none; }
+          .jl .detail { overscroll-behavior:contain; }
+          .jl .detail .d-grip {
+            display:block; width:40px; height:4px; margin:-4px auto 10px; border-radius:999px;
+            background:var(--jl-border); touch-action:none;
+          }
         }
         .jl .detail .d-trace {
           display: flex; flex-direction: column; gap: 0;
@@ -217,23 +268,24 @@ class JarvisLogbook extends HTMLElement {
           display: grid; grid-template-columns: 22px 1fr;
           gap: 0 6px; padding: 5px 10px; align-items: baseline;
           border-bottom: 1px solid color-mix(in srgb, var(--jl-border) 50%, transparent);
-          font-family: var(--jl-mono); font-size: 11px; transition: background .1s;
+          font-family: var(--jl-mono); font-size: var(--jl-fs-sm); transition: background .1s;
         }
         .jl .detail .d-trace-step:last-child { border-bottom: none; }
         .jl .detail .d-trace-step:hover {
           background: color-mix(in srgb, var(--jl-accent) 6%, transparent);
         }
         .jl .detail .d-trace-n {
-          color: var(--jl-accent); font-weight: 700; font-size: 10px;
+          color: var(--jl-accent); font-weight: 700; font-size: var(--jl-fs-xs);
           text-align: right; padding-top: 1px; opacity: .7;
         }
         .jl .detail .d-trace-name {
-          color: var(--jl-text); font-weight: 600; font-size: 11px; line-height: 1.35;
+          color: var(--jl-text); font-weight: 600; font-size: var(--jl-fs-sm); line-height: 1.35;
         }
         .jl .detail .d-trace-sum {
-          grid-column: 2; color: var(--jl-dim); font-size: 10px;
-          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-          line-height: 1.3; opacity: .75;
+          grid-column: 2; color: var(--jl-dim); font-size: var(--jl-fs-xs);
+          white-space: normal; overflow-wrap: anywhere;
+          display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3;
+          overflow: hidden; line-height: 1.35; opacity: .8;
         }
       </style>
       <div class="jl">
@@ -241,6 +293,7 @@ class JarvisLogbook extends HTMLElement {
           <div class="stats" id="jl-stats"></div>
           <div class="filters" id="jl-filters"></div>
         </div>
+        <div class="scrim hidden" id="jl-scrim"></div>
         <div class="wrap">
           <div class="list" id="jl-list"></div>
           <div class="detail hidden" id="jl-detail"></div>
@@ -253,19 +306,108 @@ class JarvisLogbook extends HTMLElement {
   _buildFilters() {
     const f = this.querySelector("#jl-filters");
     f.innerHTML = `
-      <span class="rng">de</span><input type="date" id="jl-from" value="${this._from}">
-      <span class="rng">até</span><input type="date" id="jl-to" value="${this._to}">
+      <span id="jl-range"></span>
       <select id="jl-mode"><option value="">modo: todos</option><option value="power">power</option><option value="fast">fast</option></select>
       <select id="jl-status"><option value="">status: todos</option><option value="ok">ok</option><option value="error">erro</option></select>
       <input type="text" id="jl-q" placeholder="buscar prompt/resposta…">
       <label><input type="checkbox" id="jl-group"> 🧵 agrupar conversa</label>
       <span class="live" id="jl-live"></span>`;
-    this.querySelector("#jl-from").onchange = (e) => { this._from = e.target.value; this._load(); };
-    this.querySelector("#jl-to").onchange = (e) => { this._to = e.target.value; this._load(); };
     this.querySelector("#jl-mode").onchange = (e) => { this._filters.mode = e.target.value || undefined; this._renderBody(); };
     this.querySelector("#jl-status").onchange = (e) => { this._filters.status = e.target.value || undefined; this._renderBody(); };
     this.querySelector("#jl-q").oninput = (e) => { this._filters.query = e.target.value || undefined; this._renderBody(); };
     this.querySelector("#jl-group").onchange = (e) => { this._grouped = e.target.checked; this._renderBody(); };
+    this._mountRangePickerReplica();
+  }
+
+  _mountRangePickerReplica() {
+    const host = this.querySelector("#jl-range");
+    if (!host) return;
+    this._calY = Number(this._to.slice(0, 4));
+    this._calM = Number(this._to.slice(5, 7)) - 1;
+    this._pick = null; // 1º clique de um novo range
+    host.innerHTML = `<div class="rp">
+      <button class="rp-field" id="rp-field"></button>
+      <div class="rp-pop hidden" id="rp-pop"></div>
+    </div>`;
+    this._renderRpField();
+    this.querySelector("#rp-field").onclick = (e) => {
+      e.stopPropagation();
+      const pop = this.querySelector("#rp-pop");
+      pop.classList.toggle("hidden");
+      if (!pop.classList.contains("hidden")) this._renderRpPop();
+    };
+    if (this._rpOutside) document.removeEventListener("click", this._rpOutside);
+    this._rpOutside = (e) => {
+      const pop = this.querySelector("#rp-pop");
+      const host = this.querySelector("#jl-range");
+      if (pop && !pop.classList.contains("hidden") && host && !host.contains(e.target)) pop.classList.add("hidden");
+    };
+    document.addEventListener("click", this._rpOutside);
+  }
+
+  _renderRpField() {
+    const f = this.querySelector("#rp-field");
+    if (f) f.textContent = this._from === this._to ? this._from : `${this._from} → ${this._to}`;
+  }
+
+  _renderRpPop() {
+    const pop = this.querySelector("#rp-pop");
+    const presets = [["today","Hoje"],["yesterday","Ontem"],["week","Esta semana"],
+      ["month","Este mês"],["last7","Últimos 7 dias"],["last30","Últimos 30 dias"]];
+    const weeks = monthMatrix(this._calY, this._calM);
+    const dow = ["S","T","Q","Q","S","S","D"];
+    const monName = new Date(this._calY, this._calM, 1)
+      .toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+    const lo = this._from <= this._to ? this._from : this._to;
+    const hi = this._from <= this._to ? this._to : this._from;
+    pop.innerHTML = `
+      <div class="rp-presets">${presets.map(([k,l]) =>
+        `<button data-k="${k}">${l}</button>`).join("")}</div>
+      <div class="rp-cal">
+        <div class="rp-cal-head"><button data-nav="-1">‹</button><span>${monName}</span><button data-nav="1">›</button></div>
+        <div class="rp-grid">
+          ${dow.map((d) => `<span class="dow">${d}</span>`).join("")}
+          ${weeks.flat().map((d) => {
+            const iso = localISODate(d);
+            const out = d.getMonth() !== this._calM ? "out" : "";
+            const edge = (iso === lo || iso === hi) ? "edge" : "";
+            const inr = (!edge && iso > lo && iso < hi) ? "in" : "";
+            return `<span class="cell ${out} ${inr} ${edge}" data-iso="${iso}">${d.getDate()}</span>`;
+          }).join("")}
+        </div>
+      </div>`;
+    pop.querySelectorAll(".rp-presets button").forEach((b) => {
+      b.onclick = (e) => {
+        e.stopPropagation();
+        const r = presetRange(b.dataset.k);
+        this._from = r.from; this._to = r.to; this._pick = null;
+        this._renderRpField(); this._renderRpPop(); this._load();
+        pop.classList.add("hidden");
+      };
+    });
+    pop.querySelectorAll("[data-nav]").forEach((b) => {
+      b.onclick = (e) => {
+        e.stopPropagation();
+        this._calM += Number(b.dataset.nav);
+        if (this._calM < 0) { this._calM = 11; this._calY--; }
+        if (this._calM > 11) { this._calM = 0; this._calY++; }
+        this._renderRpPop();
+      };
+    });
+    pop.querySelectorAll(".cell").forEach((c) => {
+      c.onclick = (e) => {
+        e.stopPropagation();
+        const iso = c.dataset.iso;
+        if (this._pick == null) { this._pick = iso; this._from = iso; this._to = iso; }
+        else {
+          this._from = this._pick <= iso ? this._pick : iso;
+          this._to = this._pick <= iso ? iso : this._pick;
+          this._pick = null;
+          this._load(); pop.classList.add("hidden");
+        }
+        this._renderRpField(); this._renderRpPop();
+      };
+    });
   }
 
   _renderBody() {
@@ -278,7 +420,7 @@ class JarvisLogbook extends HTMLElement {
       this.querySelector("#jl-list").innerHTML = threads.map((t) => {
         const head = t.records[0] || {};
         const inner = t.records.map((r, i) => `
-          <tr data-tk="${this._esc(t.sessionId)}" data-i="${i}" class="${r.ok ? "" : "err"}">
+          <tr data-tk="${this._esc(t.sessionId)}" data-i="${i}" class="${r.ok ? "" : "err"} ${this._selected === r ? "sel" : ""}">
             <td><span class="mono" style="padding-left:14px">${fmtTime(r.ts)}</span></td>
             <td class="trunc">${this._esc(r.prompt)}</td>
             <td class="trunc">${this._esc(r.response || (r.error ? "erro: " + r.error : ""))}</td>
@@ -289,9 +431,9 @@ class JarvisLogbook extends HTMLElement {
           <tbody>${inner}</tbody></table>`;
       }).join("") || `<p class="empty">Sem interações neste dia.</p>`;
       this.querySelectorAll("#jl-list tbody tr").forEach((tr) => {
-        const t = groupByThread(this._visibleCache).find((x) => x.sessionId === tr.dataset.tk);
-        if (t) tr.onclick = () => this._select(t.records[Number(tr.dataset.i)]);
+        tr.onclick = () => { this._markSelected(tr); const t = groupByThread(this._visibleCache).find((x) => x.sessionId === tr.dataset.tk); if (t) this._select(t.records[Number(tr.dataset.i)]); };
       });
+      this._selEl = this.querySelector("#jl-list tr.sel") || null;
       return;
     }
     const s = computeStats(recs);
@@ -317,8 +459,9 @@ class JarvisLogbook extends HTMLElement {
       ? `<table><thead><tr><th>Data</th><th>Hora</th><th>Usuário</th><th>Prompt</th><th>Resposta</th><th>Modo</th><th>⏱</th><th>✓</th></tr></thead><tbody>${rows}</tbody></table>${note}`
       : `<p class="empty">Sem interações neste dia.</p>${note}`;
     this.querySelectorAll("#jl-list tbody tr").forEach((tr) => {
-      tr.onclick = () => this._select(this._visibleCache[Number(tr.dataset.i)]);
+      tr.onclick = () => { this._markSelected(tr); this._select(this._visibleCache[Number(tr.dataset.i)]); };
     });
+    this._selEl = this.querySelector("#jl-list tr.sel") || null;
   }
 
   _select(r) {
@@ -328,6 +471,7 @@ class JarvisLogbook extends HTMLElement {
     const d = this.querySelector("#jl-detail");
     d.classList.remove("hidden");
     d.innerHTML = `
+      <div class="d-grip"></div>
       <div class="d-head">
         <span class="mono">${fmtTime(r.ts)}</span>
         <span>${this._esc(resolveUserName(r.sessionKey, um))}</span>
@@ -358,12 +502,55 @@ class JarvisLogbook extends HTMLElement {
         sessionId: <b>${this._esc(r.sessionId)}</b><br>
         ts: <b>${this._esc(r.ts)}</b>
       </div>`;
-    this.querySelector("#jl-close").onclick = () => {
-      this._selected = null;
-      d.classList.add("hidden");
-      this._renderBody();
+    this.querySelector("#jl-close").onclick = () => this._closeSheet();
+    this._bindSheetDrag();
+    this._openSheet();
+  }
+
+  _markSelected(el) {
+    if (this._selEl) this._selEl.classList.remove("sel");
+    if (el) el.classList.add("sel");
+    this._selEl = el;
+  }
+
+  _openSheet() {
+    const sc = this.querySelector("#jl-scrim");
+    if (sc) { sc.classList.remove("hidden"); sc.onclick = () => this._closeSheet(); }
+    document.documentElement.classList.add("jl-sheet-open");
+  }
+
+  _closeSheet() {
+    this._selected = null;
+    const d = this.querySelector("#jl-detail");
+    if (d) { d.classList.add("hidden"); d.style.transform = ""; }
+    const sc = this.querySelector("#jl-scrim");
+    if (sc) sc.classList.add("hidden");
+    document.documentElement.classList.remove("jl-sheet-open");
+    if (this._selEl) { this._selEl.classList.remove("sel"); this._selEl = null; }
+  }
+
+  _bindSheetDrag() {
+    const d = this.querySelector("#jl-detail");
+    if (!d) return;
+    const grip = d.querySelector(".d-grip");
+    if (!grip) return;
+    let startY = null, dy = 0;
+    const onStart = (e) => {
+      if (!e.touches || !e.touches.length) return;
+      startY = e.touches[0].clientY; dy = 0; d.style.transition = "none";
     };
-    this._renderBody();
+    const onMove = (e) => {
+      if (startY == null || !e.touches || !e.touches.length) return;
+      dy = e.touches[0].clientY - startY;
+      if (dy > 0) { d.style.transform = `translateY(${dy}px)`; }
+    };
+    const onEnd = () => {
+      d.style.transition = "";
+      if (dy > 90) { this._closeSheet(); }
+      else { d.style.transform = ""; }
+      startY = null; dy = 0;
+    };
+    grip.ontouchstart = onStart; grip.ontouchmove = onMove; grip.ontouchend = onEnd;
   }
 
   _onLive(rec) {
@@ -384,6 +571,9 @@ class JarvisLogbook extends HTMLElement {
 
   disconnectedCallback() {
     if (this._unsub) { this._unsub(); this._unsub = null; }
+    if (this._rpOutside) { document.removeEventListener("click", this._rpOutside); this._rpOutside = null; }
+    document.documentElement.classList.remove("jl-sheet-open");
+    clearTimeout(this._liveT);
   }
 }
 customElements.define("jarvis-logbook", JarvisLogbook);

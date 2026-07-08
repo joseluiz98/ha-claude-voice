@@ -73,3 +73,36 @@ export function groupByThread(records) {
   }
   return Array.from(map.entries()).map(([sessionId, recs]) => ({ sessionId, records: recs }));
 }
+
+export function presetRange(key, now = new Date()) {
+  const iso = (d) => localISODate(d);
+  const d0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const minus = (n) => { const d = new Date(d0); d.setDate(d.getDate() - n); return d; };
+  switch (key) {
+    case "today": return { from: iso(d0), to: iso(d0) };
+    case "yesterday": return { from: iso(minus(1)), to: iso(minus(1)) };
+    case "week": { const wd = (d0.getDay() + 6) % 7; return { from: iso(minus(wd)), to: iso(d0) }; }
+    case "month": return { from: iso(new Date(d0.getFullYear(), d0.getMonth(), 1)), to: iso(d0) };
+    case "last7": return { from: iso(minus(6)), to: iso(d0) };
+    case "last30": return { from: iso(minus(29)), to: iso(d0) };
+    default: return { from: iso(d0), to: iso(d0) };
+  }
+}
+
+// Matriz de semanas (seg→dom) cobrindo o mês; células podem ser do mês vizinho.
+export function monthMatrix(year, month) {
+  const first = new Date(year, month, 1);
+  const startOffset = (first.getDay() + 6) % 7; // seg=0
+  const start = new Date(year, month, 1 - startOffset);
+  const weeks = [];
+  for (let w = 0; w < 6; w++) {
+    const row = [];
+    for (let d = 0; d < 7; d++) {
+      row.push(new Date(start.getFullYear(), start.getMonth(), start.getDate() + w * 7 + d));
+    }
+    weeks.push(row);
+  }
+  // remove semanas finais se totalmente fora do mês (pode haver mais de uma)
+  while (weeks.length && weeks[weeks.length - 1].every((d) => d.getMonth() !== month)) weeks.pop();
+  return weeks;
+}
