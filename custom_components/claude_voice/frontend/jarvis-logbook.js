@@ -105,7 +105,6 @@ class JarvisLogbook extends HTMLElement {
           --jl-fs: 1.13rem;     /* ~18px  (antes 13–13.5px corpo/tabela/filtros) */
           --jl-fs-lg: 1.35rem;  /* ~22px  (antes 15–18px botões/close) */
           --jl-fs-xl: 1.63rem;  /* ~26px  (antes 19px número das stats) */
-          container-type: inline-size;
           font-family: var(--paper-font-body1_-_font-family, "Segoe UI", system-ui, sans-serif);
           color: var(--jl-text);
           font-size: var(--jl-fs);
@@ -212,7 +211,7 @@ class JarvisLogbook extends HTMLElement {
 
         .jl .rp { position:relative; display:inline-block; }
         .jl .rp-field {
-          font:inherit; font-size:var(--jl-fs); padding:6px 11px; cursor:pointer;
+          font:inherit; font-size:var(--jl-fs); padding:6px 11px; cursor:pointer; white-space:nowrap;
           border:1px solid var(--jl-border); border-radius:9px; background:var(--jl-surface); color:var(--jl-text);
         }
         .jl .rp-pop {
@@ -238,7 +237,7 @@ class JarvisLogbook extends HTMLElement {
         .jl .rp-grid .cell.in { background:color-mix(in srgb, var(--jl-accent) 16%, transparent); }
         .jl .rp-grid .cell.edge { background:var(--jl-accent); color:#fff; }
 
-        @container (max-width: 760px) {
+        @media (max-width: 760px) {
           .jl .wrap { flex-direction:column; }
           .jl .trunc { max-width:46vw; }
           .jl .detail {
