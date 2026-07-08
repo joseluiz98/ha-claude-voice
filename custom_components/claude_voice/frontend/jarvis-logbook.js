@@ -239,8 +239,9 @@ class JarvisLogbook extends HTMLElement {
         }
         .jl .detail .d-trace-sum {
           grid-column: 2; color: var(--jl-dim); font-size: var(--jl-fs-xs);
-          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-          line-height: 1.3; opacity: .75;
+          white-space: normal; overflow-wrap: anywhere;
+          display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3;
+          overflow: hidden; line-height: 1.35; opacity: .8;
         }
       </style>
       <div class="jl">
