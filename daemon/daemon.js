@@ -82,9 +82,9 @@ function loadConfig() {
   // Latência: modelo rápido + MCP mínimo (só HA/NR, evita carregar 8 servidores).
   cfg.model = cfg.model || 'claude-sonnet-4-6';
   cfg.fallbackModel = cfg.fallbackModel || 'claude-opus-4-8';
-  // Passo de reescrita p/ fala é transform de texto puro (sem tools/permissão auto):
-  // Haiku basta e é ~barato. Fallback = modelo principal se Haiku falhar.
-  cfg.rewriteModel = cfg.rewriteModel || 'claude-haiku-4-5-20251001';
+  // D8: knob único do "mais barato que roda". rewriteModel NÃO tem default
+  // aqui de propósito — só existe no config se alguém quiser divergir.
+  cfg.cheapestModel = cfg.cheapestModel || 'claude-haiku-4-5-20251001';
   // auto = classificador nativo (Sonnet) decide seguro/destrutivo + sonda anti-injeção.
   // Exige Sonnet/Opus (por isso fallback é Opus, não Haiku).
   cfg.permissionMode = cfg.permissionMode || 'auto';
