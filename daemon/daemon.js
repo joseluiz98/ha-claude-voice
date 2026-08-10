@@ -385,7 +385,7 @@ function runProbe(cb) {
     '--allowedTools', '',
     '--mcp-config', EMPTY_MCP, '--strict-mcp-config'];
   const child = spawn(CLAUDE_BIN, args, { cwd: '/data/claude-voice-workdir', env: { ...process.env, HOME: '/root' } });
-  let out = '', done = false;
+  let out = '', err = '', done = false;
   const finish = (obj) => {
     if (done) return; done = true;
     probeRunning = false;
@@ -397,12 +397,14 @@ function runProbe(cb) {
   };
   const killer = setTimeout(() => { child.kill('SIGKILL'); finish({ ok: false, kind: 'other', ms: Date.now() - t0, error: 'timeout' }); }, 45000);
   child.stdout.on('data', d => out += d);
+  child.stderr.on('data', d => err += d);
   child.on('error', e => { clearTimeout(killer); finish({ ok: false, kind: 'other', ms: Date.now() - t0, error: e.message }); });
   child.on('close', () => {
     clearTimeout(killer);
     const ms = Date.now() - t0;
     let j; try { j = JSON.parse(out); } catch (_) {
-      return finish({ ok: false, kind: 'other', ms, error: 'saída não é JSON' });
+      const suffix = err.trim() ? `: ${err.trim().slice(0, 120)}` : '';
+      return finish({ ok: false, kind: 'other', ms, error: `saída não é JSON${suffix}` });
     }
     // D9: sucesso é AUSÊNCIA de erro classificado, não casar a string "ok".
     const cls = H.classifyClaudeError(j);
