@@ -158,8 +158,17 @@ class WarmClaude {
     this.child.stdin.write(H.buildUserMessage(q.prompt));
   }
 
+  // D13: whitelist dos saudáveis, NÃO blacklist dos ruins. Estado novo que
+  // ninguém classificou cai em 'stuck' e alerta, em vez de passar por saudável.
+  static healthOf(state) {
+    if (state === 'online' || state === 'starting') return 'ok';
+    if (state === 'usage_limited') return 'paused';
+    return 'stuck';
+  }
+
   getStatus() {
-    return { warm: this.state === 'online', state: this.state, turns: this.turns,
+    return { warm: this.state === 'online', state: this.state,
+      health: WarmClaude.healthOf(this.state), turns: this.turns,
       ageSec: this.startedAt ? Math.round((Date.now() - this.startedAt) / 1000) : 0,
       lastRespawnReason: this.lastRespawnReason, limitWindow: this.limitWindow, limitResetsAt: this.limitResetsAt };
   }

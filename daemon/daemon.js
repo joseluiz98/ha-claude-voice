@@ -255,7 +255,7 @@ function postHeartbeat() {
       requests_total: metrics.requestsTotal, errors_total: metrics.errorsTotal, spoken_total: metrics.spokenTotal,
       last_request_at: metrics.lastRequestAt, last_duration_ms: metrics.lastDurationMs, last_error: metrics.lastError,
       busy: metrics.busy, active_sessions: sessions.size, port: CFG.port,
-      warm: w.warm, claude_state: w.state, turns_since_reset: w.turns, process_age_sec: w.ageSec,
+      warm: w.warm, claude_state: w.state, health: w.health, turns_since_reset: w.turns, process_age_sec: w.ageSec,
       last_respawn_reason: w.lastRespawnReason, limit_window: w.limitWindow, limit_resets_at: w.limitResetsAt,
     },
   });
