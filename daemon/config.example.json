@@ -43,5 +43,6 @@
   ],
   "maxConsecutiveFailures": 3,
   "mode": "power",
+  "cheapestModel": "claude-haiku-4-5-20251001",
   "rewriteModel": "claude-haiku-4-5-20251001"
 }

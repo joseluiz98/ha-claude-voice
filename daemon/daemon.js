@@ -25,6 +25,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 
 const { forSpeech, needsRewrite } = require('./speech-format.js');
+const H = require('./warm-helpers.js');
 
 const DIR = '/share/claude-voice';
 const CONFIG_PATH = `${DIR}/config.json`;
@@ -103,6 +104,11 @@ function loadConfig() {
 }
 const CFG = loadConfig();
 
+// D8: knob geral do "mais barato que roda", reusável por endpoints futuros.
+// rewriteModel vira escape hatch opcional — se ausente, herda o barato.
+const CHEAP   = CFG.cheapestModel || 'claude-haiku-4-5-20251001';
+const REWRITE = CFG.rewriteModel  || CHEAP;
+
 // Precisam existir antes de warm.start(): start() agora emite o state change
 // de forma síncrona (D14), e o handler chama postHeartbeat() na hora, que lê
 // metrics/sessions. Declarar depois do warm.start() deixava as duas em TDZ
@@ -110,6 +116,12 @@ const CFG = loadConfig();
 // o daemon em todo boot.
 const metrics = { requestsTotal: 0, errorsTotal: 0, spokenTotal: 0, lastRequestAt: null, lastDurationMs: null, lastError: null, busy: 0 };
 const sessions = new Map(); // sessionKey -> { id, lastUsed }
+
+// Estado do probe (D7). Declarado AQUI, e não junto de runProbe(), porque
+// postHeartbeat() lê estas variáveis e roda sincronicamente durante o
+// warm.start() da inicialização — declarar mais abaixo causa TDZ/crash-loop.
+let probeRunning = false;
+let lastProbeAt = null, lastProbeOk = null;
 
 const { WarmClaude } = require('./warm-claude.js');
 const warm = new WarmClaude({
@@ -198,7 +210,7 @@ function rewriteForSpeech(raw, cb) {
     'conclusão ou recomendação em vez de listar tudo.',
   ].join(' ');
   const args = ['-p', 'Reescreva para fala curta:\n\n' + raw,
-    '--output-format', 'json', '--model', CFG.rewriteModel,
+    '--output-format', 'json', '--model', REWRITE,
     '--append-system-prompt', sys, '--allowedTools', '',
     '--mcp-config', EMPTY_MCP, '--strict-mcp-config',
     '--fallback-model', CFG.model];
@@ -268,6 +280,7 @@ function postHeartbeat() {
       busy: metrics.busy, active_sessions: sessions.size, port: CFG.port,
       warm: w.warm, claude_state: w.state, health: w.health, turns_since_reset: w.turns, process_age_sec: w.ageSec,
       last_respawn_reason: w.lastRespawnReason, limit_window: w.limitWindow, limit_resets_at: w.limitResetsAt,
+      last_probe_at: lastProbeAt, last_probe_ok: lastProbeOk,
     },
   });
   const req = http.request({ host: 'supervisor', method: 'POST', path: `/core/api/states/${HA_SENSOR}`,
@@ -358,6 +371,46 @@ function handleAsk(j, respond) {
     .catch(err => finish(err));
 }
 
+// --- Probe de capacidade (D7) --------------------------------------------
+// Stateless, modelo mais barato, sem tools e sem MCP. NÃO passa pelo processo
+// quente e NÃO entra nas métricas nem no NDJSON de conversas. Sem
+// --fallback-model de propósito: cair pro Sonnet anularia o custo e mascararia
+// a causa; por isso o resultado carrega `kind`.
+function runProbe(cb) {
+  if (probeRunning) return cb(429, { ok: false, error: 'probe em andamento' });
+  probeRunning = true;
+  const t0 = Date.now();
+  const args = ['-p', 'Responda apenas: ok',
+    '--output-format', 'json', '--model', CHEAP,
+    '--allowedTools', '',
+    '--mcp-config', EMPTY_MCP, '--strict-mcp-config'];
+  const child = spawn(CLAUDE_BIN, args, { cwd: '/data/claude-voice-workdir', env: { ...process.env, HOME: '/root' } });
+  let out = '', done = false;
+  const finish = (obj) => {
+    if (done) return; done = true;
+    probeRunning = false;
+    lastProbeAt = new Date().toISOString();
+    lastProbeOk = obj.ok;
+    log('PROBE', JSON.stringify(obj));
+    postHeartbeat();
+    cb(200, obj);
+  };
+  const killer = setTimeout(() => { child.kill('SIGKILL'); finish({ ok: false, kind: 'other', ms: Date.now() - t0, error: 'timeout' }); }, 45000);
+  child.stdout.on('data', d => out += d);
+  child.on('error', e => { clearTimeout(killer); finish({ ok: false, kind: 'other', ms: Date.now() - t0, error: e.message }); });
+  child.on('close', () => {
+    clearTimeout(killer);
+    const ms = Date.now() - t0;
+    let j; try { j = JSON.parse(out); } catch (_) {
+      return finish({ ok: false, kind: 'other', ms, error: 'saída não é JSON' });
+    }
+    // D9: sucesso é AUSÊNCIA de erro classificado, não casar a string "ok".
+    const cls = H.classifyClaudeError(j);
+    if (cls) return finish({ ok: false, kind: cls.kind, ms, error: String(j.result || j.subtype || '').slice(0, 200) });
+    finish({ ok: true, ms, model: CHEAP });
+  });
+}
+
 const server = http.createServer((req, res) => {
   if (req.method === 'GET' && req.url === '/health')
     return send(res, 200, { ok: true, version: VERSION, uptimeSec: Math.round((Date.now() - START) / 1000), metrics, activeSessions: sessions.size });
@@ -370,6 +423,10 @@ const server = http.createServer((req, res) => {
       handleAsk(j, (code, obj) => send(res, code, obj));
     });
     return;
+  }
+  if (req.method === 'POST' && req.url === '/probe') {
+    if (!authOk(req)) { log('AUTH FAIL from', req.socket.remoteAddress); return send(res, 401, { ok: false, error: 'unauthorized' }); }
+    return runProbe((code, obj) => send(res, code, obj));
   }
   send(res, 404, { ok: false, error: 'not found' });
 });
