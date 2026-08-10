@@ -31,6 +31,11 @@ class WarmClaude {
     this.child.on('close', code => { if (this.child === child) this._onClose(code); });
     this.child.on('error', e => this.log('WARM spawn err:', e.message));
     this.log(`WARM started pid=${this.child.pid}`);
+    // D14: sem isto, a recuperação é silenciosa e o HA só descobre no heartbeat
+    // periódico seguinte (até 30s depois). O handler de onStateChange não tem
+    // ramo para 'online', então nenhuma notificação nova dispara — só o
+    // postHeartbeat() imediato.
+    this._emitState(null);
   }
 
   _onStdout(d) {
@@ -158,8 +163,17 @@ class WarmClaude {
     this.child.stdin.write(H.buildUserMessage(q.prompt));
   }
 
+  // D13: whitelist dos saudáveis, NÃO blacklist dos ruins. Estado novo que
+  // ninguém classificou cai em 'stuck' e alerta, em vez de passar por saudável.
+  static healthOf(state) {
+    if (state === 'online' || state === 'starting') return 'ok';
+    if (state === 'usage_limited') return 'paused';
+    return 'stuck';
+  }
+
   getStatus() {
-    return { warm: this.state === 'online', state: this.state, turns: this.turns,
+    return { warm: this.state === 'online', state: this.state,
+      health: WarmClaude.healthOf(this.state), turns: this.turns,
       ageSec: this.startedAt ? Math.round((Date.now() - this.startedAt) / 1000) : 0,
       lastRespawnReason: this.lastRespawnReason, limitWindow: this.limitWindow, limitResetsAt: this.limitResetsAt };
   }

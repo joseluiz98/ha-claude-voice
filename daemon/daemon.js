@@ -24,16 +24,19 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const crypto = require('crypto');
 
+const { forSpeech, needsRewrite } = require('./speech-format.js');
+const H = require('./warm-helpers.js');
+
 const DIR = '/share/claude-voice';
 const CONFIG_PATH = `${DIR}/config.json`;
 const LOG_PATH = `${DIR}/daemon.log`;
 const LOG_CONV_DIR = `${DIR}/conversations`;
 const CLAUDE_BIN = '/share/npm-global/bin/claude';
-const VERSION = '0.5.0';
+const EMPTY_MCP = `${DIR}/mcp-empty.json`;
+const VERSION = '0.6.0';
 const HA_SENSOR = 'sensor.claude_voice_status';
 const HEARTBEAT_MS = 30000;
 const SESSION_TTL_MS = 10 * 60 * 1000;
-const SPEAK_MAXLEN = 600;
 const START = Date.now();
 
 // Persona de voz: respostas são FALADAS por uma Echo, então precisam ser curtas
@@ -43,6 +46,7 @@ const VOICE_SYSTEM_PROMPT = [
   'Suas respostas são FALADAS em voz alta. Por isso:',
   '- Responda em português do Brasil, em no máximo 1 ou 2 frases curtas.',
   '- Texto puro: sem markdown, listas, blocos de código, emojis ou URLs.',
+  '- MESMO após pesquisa/WebSearch, a resposta FALADA continua 1-2 frases. NUNCA produza tabelas, títulos, listas, blocos de código, seções "Sources"/links ou relatórios — sintetize o achado numa conclusão falável. Se o usuário quiser detalhes, ele pede.',
   '- Vá direto ao ponto, sem preâmbulo ("claro", "com certeza", etc.).',
   '- Você tem ACESSO PLENO: ferramentas do Home Assistant, shell (Bash) e a API REST do HA (use $SUPERVISOR_TOKEN com http://supervisor/core/api/).',
   '- Para LER estado de qualquer entidade (inclusive as que o MCP não expõe, ex: input_select.maquina_de_lavar) use SEMPRE o comando exato /data/claude-voice-workdir/ha_read.sh <entity_id> — é o jeito rápido e padrão de ler estado. Para AÇÕES (ligar/desligar, etc.) use as ferramentas do HA ou curl POST na REST.',
@@ -78,6 +82,9 @@ function loadConfig() {
   // Latência: modelo rápido + MCP mínimo (só HA/NR, evita carregar 8 servidores).
   cfg.model = cfg.model || 'claude-sonnet-4-6';
   cfg.fallbackModel = cfg.fallbackModel || 'claude-opus-4-8';
+  // D8: knob único do "mais barato que roda". rewriteModel NÃO tem default
+  // aqui de propósito — só existe no config se alguém quiser divergir.
+  cfg.cheapestModel = cfg.cheapestModel || 'claude-haiku-4-5-20251001';
   // auto = classificador nativo (Sonnet) decide seguro/destrutivo + sonda anti-injeção.
   // Exige Sonnet/Opus (por isso fallback é Opus, não Haiku).
   cfg.permissionMode = cfg.permissionMode || 'auto';
@@ -96,6 +103,25 @@ function loadConfig() {
   return cfg;
 }
 const CFG = loadConfig();
+
+// D8: knob geral do "mais barato que roda", reusável por endpoints futuros.
+// rewriteModel vira escape hatch opcional — se ausente, herda o barato.
+const CHEAP   = CFG.cheapestModel || 'claude-haiku-4-5-20251001';
+const REWRITE = CFG.rewriteModel  || CHEAP;
+
+// Precisam existir antes de warm.start(): start() agora emite o state change
+// de forma síncrona (D14), e o handler chama postHeartbeat() na hora, que lê
+// metrics/sessions. Declarar depois do warm.start() deixava as duas em TDZ
+// (ReferenceError: Cannot access 'metrics' before initialization) e derrubava
+// o daemon em todo boot.
+const metrics = { requestsTotal: 0, errorsTotal: 0, spokenTotal: 0, lastRequestAt: null, lastDurationMs: null, lastError: null, busy: 0 };
+const sessions = new Map(); // sessionKey -> { id, lastUsed }
+
+// Estado do probe (D7). Declarado AQUI, e não junto de runProbe(), porque
+// postHeartbeat() lê estas variáveis e roda sincronicamente durante o
+// warm.start() da inicialização — declarar mais abaixo causa TDZ/crash-loop.
+let probeRunning = false;
+let lastProbeAt = null, lastProbeOk = null;
 
 const { WarmClaude } = require('./warm-claude.js');
 const warm = new WarmClaude({
@@ -118,10 +144,13 @@ warm.onStateChange = (state, detail) => {
     notifyJose('Claude por voz falhou após várias tentativas de reinício.');
   }
 };
-warm.start();
-
-const metrics = { requestsTotal: 0, errorsTotal: 0, spokenTotal: 0, lastRequestAt: null, lastDurationMs: null, lastError: null, busy: 0 };
-const sessions = new Map(); // sessionKey -> { id, lastUsed }
+// warm.start() é disparado dentro do callback de server.listen (abaixo), não
+// aqui. Motivo: start() agora emite o state change de forma síncrona (D14),
+// e postar isso ANTES do bind confirmado deixa um crash-loop de boot
+// invisível ao watchdog — o heartbeat sai com state:'online' e last_seen
+// fresco mesmo que o processo nunca chegue a ouvir na porta e morra segundos
+// depois. Adiar para dentro do listen() torna esse cenário estruturalmente
+// impossível: nada com efeito observável roda antes do bind confirmado.
 
 function log(...a) {
   const line = `[${new Date().toISOString()}] ${a.join(' ')}\n`;
@@ -165,18 +194,50 @@ function authOk(req) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-// Limpa texto pra TTS: remove markdown e aparа.
-function forSpeech(s) {
-  let t = (s || '').toString()
-    .replace(/```[\s\S]*?```/g, ' ')      // blocos de código
-    .replace(/`([^`]*)`/g, '$1')          // inline code
-    .replace(/\*\*([^*]*)\*\*/g, '$1')    // bold
-    .replace(/\*([^*]*)\*/g, '$1')        // italic
-    .replace(/^#{1,6}\s*/gm, '')          // headers
-    .replace(/^\s*[-*]\s+/gm, '')         // bullets
-    .replace(/\s+/g, ' ').trim();
-  if (t.length > SPEAK_MAXLEN) t = t.slice(0, SPEAK_MAXLEN).replace(/\s+\S*$/, '') + '…';
-  return t;
+// forSpeech / needsRewrite vêm de ./speech-format.js (testável isolado).
+
+// 2º passo (padrão da indústria p/ voz): quando a resposta é um relatório longo
+// ou estruturado (needsRewrite), pede ao modelo pra reescrever como fala curta
+// ANTES de sanitizar. Stateless — não usa a sessão quente (não polui contexto),
+// sem tools e com MCP vazio (não carrega os servidores do /root) -> rápido.
+// Se falhar/timeout, o chamador cai no forSpeech(raw) cru.
+function rewriteForSpeech(raw, cb) {
+  const sys = [
+    'Você reescreve texto para ser FALADO por uma Echo (Alexa) em português do Brasil.',
+    'Responda SÓ com a versão falada: no máximo 2 frases curtas, texto puro (sem markdown,',
+    'tabelas, listas, blocos de código, URLs ou emojis), direto ao ponto, sem preâmbulo.',
+    'Preserve o fato mais importante; se for uma pesquisa com várias opções, dê a',
+    'conclusão ou recomendação em vez de listar tudo.',
+  ].join(' ');
+  const args = ['-p', 'Reescreva para fala curta:\n\n' + raw,
+    '--output-format', 'json', '--model', REWRITE,
+    '--append-system-prompt', sys, '--allowedTools', '',
+    '--mcp-config', EMPTY_MCP, '--strict-mcp-config',
+    '--fallback-model', CFG.model];
+  const child = spawn(CLAUDE_BIN, args, { cwd: '/data/claude-voice-workdir', env: { ...process.env, HOME: '/root' } });
+  let out = '', err = '', done = false;
+  const killer = setTimeout(() => { if (!done) { done = true; child.kill('SIGKILL'); cb(new Error('rewrite timeout')); } }, 45000);
+  child.stdout.on('data', d => out += d);
+  child.stderr.on('data', d => err += d);
+  child.on('error', e => { if (!done) { done = true; clearTimeout(killer); cb(e); } });
+  child.on('close', code => {
+    if (done) return; done = true; clearTimeout(killer);
+    if (code !== 0) return cb(new Error(`rewrite exit ${code}: ${err.trim().slice(0, 120)}`));
+    try { const j = JSON.parse(out); const txt = (j.result || '').trim(); return txt ? cb(null, txt) : cb(new Error('rewrite empty')); }
+    catch (e) { cb(new Error('rewrite parse')); }
+  });
+}
+
+// Decide a fala final e emite: relatório -> reescreve -> sanitiza; senão só sanitiza.
+function speakResult(target, raw) {
+  if (needsRewrite(raw)) {
+    rewriteForSpeech(raw, (e, short) => {
+      if (e) log('REWRITE fail, fallback sanitizer:', e.message);
+      speak(target, forSpeech((!e && short) ? short : raw));
+    });
+  } else {
+    speak(target, forSpeech(raw));
+  }
 }
 
 // Fala via alexa_media (notify.<target>) usando a REST do supervisor.
@@ -217,8 +278,9 @@ function postHeartbeat() {
       requests_total: metrics.requestsTotal, errors_total: metrics.errorsTotal, spoken_total: metrics.spokenTotal,
       last_request_at: metrics.lastRequestAt, last_duration_ms: metrics.lastDurationMs, last_error: metrics.lastError,
       busy: metrics.busy, active_sessions: sessions.size, port: CFG.port,
-      warm: w.warm, claude_state: w.state, turns_since_reset: w.turns, process_age_sec: w.ageSec,
+      warm: w.warm, claude_state: w.state, health: w.health, turns_since_reset: w.turns, process_age_sec: w.ageSec,
       last_respawn_reason: w.lastRespawnReason, limit_window: w.limitWindow, limit_resets_at: w.limitResetsAt,
+      last_probe_at: lastProbeAt, last_probe_ok: lastProbeOk,
     },
   });
   const req = http.request({ host: 'supervisor', method: 'POST', path: `/core/api/states/${HA_SENSOR}`,
@@ -298,7 +360,7 @@ function handleAsk(j, respond) {
     setSession(key, data.sessionId);
     log('OK:', `(${durationMs}ms)`, JSON.stringify(data.result).slice(0, 160)); postHeartbeat();
     if (!dryRun) logConversation({ ts: new Date(t0).toISOString(), prompt, response: data.result, ok: true, error: null, durationMs, sessionKey: key, sessionId: data.sessionId, speakTarget: target, warmState: w.state, mode: CFG.mode || 'fast', tools: data.tools || [], turnNumber: data.turnNumber ?? null, resumed });
-    if (!wait && speakBack) speak(target, forSpeech(data.result));
+    if (!wait && speakBack) speakResult(target, data.result);
     if (wait) respond(200, { ok: true, result: data.result, sessionId: data.sessionId, durationMs });
   };
 
@@ -307,6 +369,48 @@ function handleAsk(j, respond) {
   warm.ask(prompt, j.timeoutMs || CFG.turnTimeoutMs)
     .then(data => finish(null, { result: data.result, sessionId: data.sessionId, tools: data.tools || [], turnNumber: data.turnNumber ?? null }))
     .catch(err => finish(err));
+}
+
+// --- Probe de capacidade (D7) --------------------------------------------
+// Stateless, modelo mais barato, sem tools e sem MCP. NÃO passa pelo processo
+// quente e NÃO entra nas métricas nem no NDJSON de conversas. Sem
+// --fallback-model de propósito: cair pro Sonnet anularia o custo e mascararia
+// a causa; por isso o resultado carrega `kind`.
+function runProbe(cb) {
+  if (probeRunning) return cb(429, { ok: false, error: 'probe em andamento' });
+  probeRunning = true;
+  const t0 = Date.now();
+  const args = ['-p', 'Responda apenas: ok',
+    '--output-format', 'json', '--model', CHEAP,
+    '--allowedTools', '',
+    '--mcp-config', EMPTY_MCP, '--strict-mcp-config'];
+  const child = spawn(CLAUDE_BIN, args, { cwd: '/data/claude-voice-workdir', env: { ...process.env, HOME: '/root' } });
+  let out = '', err = '', done = false;
+  const finish = (obj) => {
+    if (done) return; done = true;
+    probeRunning = false;
+    lastProbeAt = new Date().toISOString();
+    lastProbeOk = obj.ok;
+    log('PROBE', JSON.stringify(obj));
+    postHeartbeat();
+    cb(200, obj);
+  };
+  const killer = setTimeout(() => { child.kill('SIGKILL'); finish({ ok: false, kind: 'other', ms: Date.now() - t0, error: 'timeout' }); }, 45000);
+  child.stdout.on('data', d => out += d);
+  child.stderr.on('data', d => err += d);
+  child.on('error', e => { clearTimeout(killer); finish({ ok: false, kind: 'other', ms: Date.now() - t0, error: e.message }); });
+  child.on('close', () => {
+    clearTimeout(killer);
+    const ms = Date.now() - t0;
+    let j; try { j = JSON.parse(out); } catch (_) {
+      const suffix = err.trim() ? `: ${err.trim().slice(0, 120)}` : '';
+      return finish({ ok: false, kind: 'other', ms, error: `saída não é JSON${suffix}` });
+    }
+    // D9: sucesso é AUSÊNCIA de erro classificado, não casar a string "ok".
+    const cls = H.classifyClaudeError(j);
+    if (cls) return finish({ ok: false, kind: cls.kind, ms, error: String(j.result || j.subtype || '').slice(0, 200) });
+    finish({ ok: true, ms, model: CHEAP });
+  });
 }
 
 const server = http.createServer((req, res) => {
@@ -322,11 +426,19 @@ const server = http.createServer((req, res) => {
     });
     return;
   }
+  if (req.method === 'POST' && req.url === '/probe') {
+    if (!authOk(req)) { log('AUTH FAIL from', req.socket.remoteAddress); return send(res, 401, { ok: false, error: 'unauthorized' }); }
+    return runProbe((code, obj) => send(res, code, obj));
+  }
   send(res, 404, { ok: false, error: 'not found' });
 });
 
 server.listen(CFG.port, '0.0.0.0', () => {
   log(`claude-voice daemon v${VERSION} ouvindo em 0.0.0.0:${CFG.port}`);
-  postHeartbeat(); setInterval(postHeartbeat, HEARTBEAT_MS);
+  // start() emite 'online' de forma síncrona (D14), o que já dispara o
+  // primeiro postHeartbeat() via onStateChange — chamar postHeartbeat() de
+  // novo aqui duplicaria o POST inicial.
+  warm.start();
+  setInterval(postHeartbeat, HEARTBEAT_MS);
 });
 process.on('SIGTERM', () => { log('SIGTERM, encerrando'); process.exit(0); });

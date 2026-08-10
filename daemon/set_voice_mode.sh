@@ -27,7 +27,7 @@ const profiles={
     suffix:"\n- MODO RAPIDO: priorize velocidade; se nao resolver em poucas tentativas, diga em uma frase que nao conseguiu."
   },
   power:{
-    turnTimeoutMs:240000, resetMaxTurns:24, resetMaxAgeMs:14400000,
+    turnTimeoutMs:360000, resetMaxTurns:24, resetMaxAgeMs:14400000,
     suffix:"\n- MODO POTENCIA: pode pensar mais e usar mais ferramentas para CHEGAR na resposta (descubra com ha_search/GetLiveContext/WebSearch, combine ferramentas e verifique; sem pressa de latencia, o usuario recebe a resposta por anuncio). So desista se realmente nao houver caminho. A resposta FALADA continua curta, 1-2 frases."
   }
 };
