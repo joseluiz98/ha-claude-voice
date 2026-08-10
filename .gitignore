@@ -11,3 +11,5 @@ restart.flag
 __pycache__/
 *.pyc
 node_modules/
+# Artefato de download avulso, não pertence ao repo
+gh.tar.gz
