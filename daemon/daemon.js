@@ -132,7 +132,13 @@ warm.onStateChange = (state, detail) => {
     notifyJose('Claude por voz falhou após várias tentativas de reinício.');
   }
 };
-warm.start();
+// warm.start() é disparado dentro do callback de server.listen (abaixo), não
+// aqui. Motivo: start() agora emite o state change de forma síncrona (D14),
+// e postar isso ANTES do bind confirmado deixa um crash-loop de boot
+// invisível ao watchdog — o heartbeat sai com state:'online' e last_seen
+// fresco mesmo que o processo nunca chegue a ouvir na porta e morra segundos
+// depois. Adiar para dentro do listen() torna esse cenário estruturalmente
+// impossível: nada com efeito observável roda antes do bind confirmado.
 
 function log(...a) {
   const line = `[${new Date().toISOString()}] ${a.join(' ')}\n`;
@@ -370,6 +376,10 @@ const server = http.createServer((req, res) => {
 
 server.listen(CFG.port, '0.0.0.0', () => {
   log(`claude-voice daemon v${VERSION} ouvindo em 0.0.0.0:${CFG.port}`);
-  postHeartbeat(); setInterval(postHeartbeat, HEARTBEAT_MS);
+  // start() emite 'online' de forma síncrona (D14), o que já dispara o
+  // primeiro postHeartbeat() via onStateChange — chamar postHeartbeat() de
+  // novo aqui duplicaria o POST inicial.
+  warm.start();
+  setInterval(postHeartbeat, HEARTBEAT_MS);
 });
 process.on('SIGTERM', () => { log('SIGTERM, encerrando'); process.exit(0); });
