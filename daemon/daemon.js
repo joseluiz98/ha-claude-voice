@@ -24,16 +24,18 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const crypto = require('crypto');
 
+const { forSpeech, needsRewrite } = require('./speech-format.js');
+
 const DIR = '/share/claude-voice';
 const CONFIG_PATH = `${DIR}/config.json`;
 const LOG_PATH = `${DIR}/daemon.log`;
 const LOG_CONV_DIR = `${DIR}/conversations`;
 const CLAUDE_BIN = '/share/npm-global/bin/claude';
-const VERSION = '0.5.0';
+const EMPTY_MCP = `${DIR}/mcp-empty.json`;
+const VERSION = '0.6.0';
 const HA_SENSOR = 'sensor.claude_voice_status';
 const HEARTBEAT_MS = 30000;
 const SESSION_TTL_MS = 10 * 60 * 1000;
-const SPEAK_MAXLEN = 600;
 const START = Date.now();
 
 // Persona de voz: respostas são FALADAS por uma Echo, então precisam ser curtas
@@ -43,6 +45,7 @@ const VOICE_SYSTEM_PROMPT = [
   'Suas respostas são FALADAS em voz alta. Por isso:',
   '- Responda em português do Brasil, em no máximo 1 ou 2 frases curtas.',
   '- Texto puro: sem markdown, listas, blocos de código, emojis ou URLs.',
+  '- MESMO após pesquisa/WebSearch, a resposta FALADA continua 1-2 frases. NUNCA produza tabelas, títulos, listas, blocos de código, seções "Sources"/links ou relatórios — sintetize o achado numa conclusão falável. Se o usuário quiser detalhes, ele pede.',
   '- Vá direto ao ponto, sem preâmbulo ("claro", "com certeza", etc.).',
   '- Você tem ACESSO PLENO: ferramentas do Home Assistant, shell (Bash) e a API REST do HA (use $SUPERVISOR_TOKEN com http://supervisor/core/api/).',
   '- Para LER estado de qualquer entidade (inclusive as que o MCP não expõe, ex: input_select.maquina_de_lavar) use SEMPRE o comando exato /data/claude-voice-workdir/ha_read.sh <entity_id> — é o jeito rápido e padrão de ler estado. Para AÇÕES (ligar/desligar, etc.) use as ferramentas do HA ou curl POST na REST.',
@@ -78,6 +81,9 @@ function loadConfig() {
   // Latência: modelo rápido + MCP mínimo (só HA/NR, evita carregar 8 servidores).
   cfg.model = cfg.model || 'claude-sonnet-4-6';
   cfg.fallbackModel = cfg.fallbackModel || 'claude-opus-4-8';
+  // Passo de reescrita p/ fala é transform de texto puro (sem tools/permissão auto):
+  // Haiku basta e é ~barato. Fallback = modelo principal se Haiku falhar.
+  cfg.rewriteModel = cfg.rewriteModel || 'claude-haiku-4-5-20251001';
   // auto = classificador nativo (Sonnet) decide seguro/destrutivo + sonda anti-injeção.
   // Exige Sonnet/Opus (por isso fallback é Opus, não Haiku).
   cfg.permissionMode = cfg.permissionMode || 'auto';
@@ -165,18 +171,50 @@ function authOk(req) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-// Limpa texto pra TTS: remove markdown e aparа.
-function forSpeech(s) {
-  let t = (s || '').toString()
-    .replace(/```[\s\S]*?```/g, ' ')      // blocos de código
-    .replace(/`([^`]*)`/g, '$1')          // inline code
-    .replace(/\*\*([^*]*)\*\*/g, '$1')    // bold
-    .replace(/\*([^*]*)\*/g, '$1')        // italic
-    .replace(/^#{1,6}\s*/gm, '')          // headers
-    .replace(/^\s*[-*]\s+/gm, '')         // bullets
-    .replace(/\s+/g, ' ').trim();
-  if (t.length > SPEAK_MAXLEN) t = t.slice(0, SPEAK_MAXLEN).replace(/\s+\S*$/, '') + '…';
-  return t;
+// forSpeech / needsRewrite vêm de ./speech-format.js (testável isolado).
+
+// 2º passo (padrão da indústria p/ voz): quando a resposta é um relatório longo
+// ou estruturado (needsRewrite), pede ao modelo pra reescrever como fala curta
+// ANTES de sanitizar. Stateless — não usa a sessão quente (não polui contexto),
+// sem tools e com MCP vazio (não carrega os servidores do /root) -> rápido.
+// Se falhar/timeout, o chamador cai no forSpeech(raw) cru.
+function rewriteForSpeech(raw, cb) {
+  const sys = [
+    'Você reescreve texto para ser FALADO por uma Echo (Alexa) em português do Brasil.',
+    'Responda SÓ com a versão falada: no máximo 2 frases curtas, texto puro (sem markdown,',
+    'tabelas, listas, blocos de código, URLs ou emojis), direto ao ponto, sem preâmbulo.',
+    'Preserve o fato mais importante; se for uma pesquisa com várias opções, dê a',
+    'conclusão ou recomendação em vez de listar tudo.',
+  ].join(' ');
+  const args = ['-p', 'Reescreva para fala curta:\n\n' + raw,
+    '--output-format', 'json', '--model', CFG.rewriteModel,
+    '--append-system-prompt', sys, '--allowedTools', '',
+    '--mcp-config', EMPTY_MCP, '--strict-mcp-config',
+    '--fallback-model', CFG.model];
+  const child = spawn(CLAUDE_BIN, args, { cwd: '/data/claude-voice-workdir', env: { ...process.env, HOME: '/root' } });
+  let out = '', err = '', done = false;
+  const killer = setTimeout(() => { if (!done) { done = true; child.kill('SIGKILL'); cb(new Error('rewrite timeout')); } }, 45000);
+  child.stdout.on('data', d => out += d);
+  child.stderr.on('data', d => err += d);
+  child.on('error', e => { if (!done) { done = true; clearTimeout(killer); cb(e); } });
+  child.on('close', code => {
+    if (done) return; done = true; clearTimeout(killer);
+    if (code !== 0) return cb(new Error(`rewrite exit ${code}: ${err.trim().slice(0, 120)}`));
+    try { const j = JSON.parse(out); const txt = (j.result || '').trim(); return txt ? cb(null, txt) : cb(new Error('rewrite empty')); }
+    catch (e) { cb(new Error('rewrite parse')); }
+  });
+}
+
+// Decide a fala final e emite: relatório -> reescreve -> sanitiza; senão só sanitiza.
+function speakResult(target, raw) {
+  if (needsRewrite(raw)) {
+    rewriteForSpeech(raw, (e, short) => {
+      if (e) log('REWRITE fail, fallback sanitizer:', e.message);
+      speak(target, forSpeech((!e && short) ? short : raw));
+    });
+  } else {
+    speak(target, forSpeech(raw));
+  }
 }
 
 // Fala via alexa_media (notify.<target>) usando a REST do supervisor.
@@ -298,7 +336,7 @@ function handleAsk(j, respond) {
     setSession(key, data.sessionId);
     log('OK:', `(${durationMs}ms)`, JSON.stringify(data.result).slice(0, 160)); postHeartbeat();
     if (!dryRun) logConversation({ ts: new Date(t0).toISOString(), prompt, response: data.result, ok: true, error: null, durationMs, sessionKey: key, sessionId: data.sessionId, speakTarget: target, warmState: w.state, mode: CFG.mode || 'fast', tools: data.tools || [], turnNumber: data.turnNumber ?? null, resumed });
-    if (!wait && speakBack) speak(target, forSpeech(data.result));
+    if (!wait && speakBack) speakResult(target, data.result);
     if (wait) respond(200, { ok: true, result: data.result, sessionId: data.sessionId, durationMs });
   };
 
