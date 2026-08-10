@@ -103,6 +103,14 @@ function loadConfig() {
 }
 const CFG = loadConfig();
 
+// Precisam existir antes de warm.start(): start() agora emite o state change
+// de forma síncrona (D14), e o handler chama postHeartbeat() na hora, que lê
+// metrics/sessions. Declarar depois do warm.start() deixava as duas em TDZ
+// (ReferenceError: Cannot access 'metrics' before initialization) e derrubava
+// o daemon em todo boot.
+const metrics = { requestsTotal: 0, errorsTotal: 0, spokenTotal: 0, lastRequestAt: null, lastDurationMs: null, lastError: null, busy: 0 };
+const sessions = new Map(); // sessionKey -> { id, lastUsed }
+
 const { WarmClaude } = require('./warm-claude.js');
 const warm = new WarmClaude({
   claudeBin: CLAUDE_BIN, cwd: '/data/claude-voice-workdir', home: '/root',
@@ -125,9 +133,6 @@ warm.onStateChange = (state, detail) => {
   }
 };
 warm.start();
-
-const metrics = { requestsTotal: 0, errorsTotal: 0, spokenTotal: 0, lastRequestAt: null, lastDurationMs: null, lastError: null, busy: 0 };
-const sessions = new Map(); // sessionKey -> { id, lastUsed }
 
 function log(...a) {
   const line = `[${new Date().toISOString()}] ${a.join(' ')}\n`;

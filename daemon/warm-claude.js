@@ -31,6 +31,11 @@ class WarmClaude {
     this.child.on('close', code => { if (this.child === child) this._onClose(code); });
     this.child.on('error', e => this.log('WARM spawn err:', e.message));
     this.log(`WARM started pid=${this.child.pid}`);
+    // D14: sem isto, a recuperação é silenciosa e o HA só descobre no heartbeat
+    // periódico seguinte (até 30s depois). O handler de onStateChange não tem
+    // ramo para 'online', então nenhuma notificação nova dispara — só o
+    // postHeartbeat() imediato.
+    this._emitState(null);
   }
 
   _onStdout(d) {
