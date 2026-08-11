@@ -73,6 +73,11 @@ export const CSS = `
           box-shadow:0 0 0 3px color-mix(in srgb, var(--jl-accent) 22%, transparent);
         }
         .jl .filters #jl-q { flex:1 1 180px; min-width:150px; }
+        /* flex:0 0 auto proíbe o encolhimento em vez de contar com o min-width:auto
+           calcular o tamanho intrínseco certo — que é onde o WebKit diverge, e o
+           consumo é em iPhone. */
+        .jl .filters > #jl-range { flex: 0 0 auto; max-width: 100%; }
+        .jl .rp-field { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
         .jl .filters button {
           font:inherit; font-family:var(--jl-mono); font-size:var(--jl-fs-lg); line-height:1; cursor:pointer;
           width:32px; height:32px; color:var(--jl-text);
@@ -160,6 +165,7 @@ export const CSS = `
         .jl .rp-pop.hidden { display:none; }
         .jl .rp-presets { display:flex; flex-direction:column; padding:8px; gap:2px; border-right:1px solid var(--jl-border); min-width:130px; }
         .jl .rp-presets button {
+          flex: 0 0 auto; white-space: nowrap;
           font:inherit; font-size:var(--jl-fs); text-align:left; padding:7px 12px; cursor:pointer;
           border:none; border-radius:8px; background:transparent; color:var(--jl-text);
         }
