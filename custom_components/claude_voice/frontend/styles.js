@@ -182,6 +182,45 @@ export const CSS = `
         .jl .rp-grid .cell.in { background:color-mix(in srgb, var(--jl-accent) 16%, transparent); }
         .jl .rp-grid .cell.edge { background:var(--jl-accent); color:#fff; }
 
+        /* O contêiner da folha vive fora da .toolbar de propósito: backdrop-filter
+           cria bloco de contenção para descendentes fixed. */
+        .jl .rp-sheet {
+          position: fixed; inset: auto 0 0 0; z-index: 21;
+          max-height: 88vh; overflow: auto; overscroll-behavior: contain;
+          padding: 8px 12px 20px; background: var(--jl-surface);
+          border-radius: 18px 18px 0 0; box-shadow: 0 -10px 40px -10px rgba(0,0,0,.5);
+          animation: jl-sheet .22s ease both;
+        }
+        .jl .rp-sheet.hidden { display: none; }
+        .jl .rp-sheet .d-grip {
+          display: block; width: 40px; height: 4px; margin: 4px auto 12px;
+          border-radius: 999px; background: var(--jl-border); touch-action: none;
+        }
+        .jl .rp-inner { display: flex; }
+        .jl .rp-grid .cell {
+          font: inherit; font-size: var(--jl-fs); border: none; background: transparent;
+          color: var(--jl-text);
+        }
+
+        /* presets como faixa de chips rolável */
+        .jl [data-presets="chips"] .rp-inner { flex-direction: column; }
+        .jl [data-presets="chips"] .rp-presets {
+          flex-direction: row; flex-wrap: nowrap; gap: 8px; min-width: 0;
+          overflow-x: auto; overscroll-behavior-x: contain;
+          border-right: none; border-bottom: 1px solid var(--jl-border);
+          padding: 4px 4px 12px;
+        }
+        .jl [data-presets="chips"] .rp-presets button {
+          min-height: 40px; padding: 0 14px; border: 1px solid var(--jl-border);
+          border-radius: 999px; text-align: center;
+        }
+        .jl [data-presets="chips"] .rp-cal { padding: 12px 0 0; }
+        .jl [data-presets="chips"] .rp-grid {
+          grid-template-columns: repeat(7, minmax(0, 1fr));
+          max-width: 320px; margin: 0 auto;
+        }
+        .jl [data-presets="chips"] .rp-grid .cell { min-height: 40px; }
+
         @media (max-width: 760px) {
           .jl .wrap { flex-direction:column; }
           /* table-layout:fixed é o que faz o ellipsis funcionar de verdade: sem

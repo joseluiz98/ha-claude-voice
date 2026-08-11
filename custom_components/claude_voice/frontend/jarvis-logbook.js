@@ -1,9 +1,10 @@
 import {
   resolveUserName, fmtDuration, fmtTime, fmtDate, localISODate,
-  applyFilters, computeStats, groupByThread, presetRange, monthMatrix, shouldShowMenu,
+  applyFilters, computeStats, groupByThread, shouldShowMenu,
 } from "./format.js";
 import { CSS } from "./styles.js";
 import { openSheet, closeSheet } from "./sheet.js";
+import { RangePicker } from "./range-picker.js";
 
 function shortToolName(name) {
   return name.replace(/^mcp__[^_]+__/, '');
@@ -119,6 +120,7 @@ class JarvisLogbook extends HTMLElement {
           <div class="filters" id="jl-filters"></div>
         </div>
         <div class="scrim hidden" id="jl-scrim"></div>
+        <div class="rp-sheet hidden" id="jl-rp-sheet"></div>
         <div class="wrap">
           <div class="list" id="jl-list"></div>
           <div class="detail hidden" id="jl-detail"></div>
@@ -146,98 +148,16 @@ class JarvisLogbook extends HTMLElement {
     this.querySelector("#jl-status").onchange = (e) => { this._filters.status = e.target.value || undefined; this._renderBody(); };
     this.querySelector("#jl-q").oninput = (e) => { this._filters.query = e.target.value || undefined; this._renderBody(); };
     this.querySelector("#jl-group").onchange = (e) => { this._grouped = e.target.checked; this._renderBody(); };
-    this._mountRangePickerReplica();
-  }
-
-  _mountRangePickerReplica() {
-    const host = this.querySelector("#jl-range");
-    if (!host) return;
-    this._calY = Number(this._to.slice(0, 4));
-    this._calM = Number(this._to.slice(5, 7)) - 1;
-    this._pick = null; // 1º clique de um novo range
-    host.innerHTML = `<div class="rp">
-      <button class="rp-field" id="rp-field"></button>
-      <div class="rp-pop hidden" id="rp-pop"></div>
-    </div>`;
-    this._renderRpField();
-    this.querySelector("#rp-field").onclick = (e) => {
-      e.stopPropagation();
-      const pop = this.querySelector("#rp-pop");
-      pop.classList.toggle("hidden");
-      if (!pop.classList.contains("hidden")) this._renderRpPop();
-    };
-    if (this._rpOutside) document.removeEventListener("click", this._rpOutside);
-    this._rpOutside = (e) => {
-      const pop = this.querySelector("#rp-pop");
-      const host = this.querySelector("#jl-range");
-      if (pop && !pop.classList.contains("hidden") && host && !host.contains(e.target)) pop.classList.add("hidden");
-    };
-    document.addEventListener("click", this._rpOutside);
-  }
-
-  _renderRpField() {
-    const f = this.querySelector("#rp-field");
-    if (f) f.textContent = this._from === this._to ? this._from : `${this._from} → ${this._to}`;
-  }
-
-  _renderRpPop() {
-    const pop = this.querySelector("#rp-pop");
-    const presets = [["today","Hoje"],["yesterday","Ontem"],["week","Esta semana"],
-      ["month","Este mês"],["last7","Últimos 7 dias"],["last30","Últimos 30 dias"]];
-    const weeks = monthMatrix(this._calY, this._calM);
-    const dow = ["S","T","Q","Q","S","S","D"];
-    const monName = new Date(this._calY, this._calM, 1)
-      .toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
-    const lo = this._from <= this._to ? this._from : this._to;
-    const hi = this._from <= this._to ? this._to : this._from;
-    pop.innerHTML = `
-      <div class="rp-presets">${presets.map(([k,l]) =>
-        `<button data-k="${k}">${l}</button>`).join("")}</div>
-      <div class="rp-cal">
-        <div class="rp-cal-head"><button data-nav="-1">‹</button><span>${monName}</span><button data-nav="1">›</button></div>
-        <div class="rp-grid">
-          ${dow.map((d) => `<span class="dow">${d}</span>`).join("")}
-          ${weeks.flat().map((d) => {
-            const iso = localISODate(d);
-            const out = d.getMonth() !== this._calM ? "out" : "";
-            const edge = (iso === lo || iso === hi) ? "edge" : "";
-            const inr = (!edge && iso > lo && iso < hi) ? "in" : "";
-            return `<span class="cell ${out} ${inr} ${edge}" data-iso="${iso}">${d.getDate()}</span>`;
-          }).join("")}
-        </div>
-      </div>`;
-    pop.querySelectorAll(".rp-presets button").forEach((b) => {
-      b.onclick = (e) => {
-        e.stopPropagation();
-        const r = presetRange(b.dataset.k);
-        this._from = r.from; this._to = r.to; this._pick = null;
-        this._renderRpField(); this._renderRpPop(); this._load();
-        pop.classList.add("hidden");
-      };
+    if (this._rp) this._rp.destroy();
+    this._rp = new RangePicker({
+      host: this.querySelector("#jl-range"),
+      sheetEl: this.querySelector("#jl-rp-sheet"),
+      scrim: this.querySelector("#jl-scrim"),
+      from: this._from,
+      to: this._to,
+      onChange: (from, to) => { this._from = from; this._to = to; this._load(); },
     });
-    pop.querySelectorAll("[data-nav]").forEach((b) => {
-      b.onclick = (e) => {
-        e.stopPropagation();
-        this._calM += Number(b.dataset.nav);
-        if (this._calM < 0) { this._calM = 11; this._calY--; }
-        if (this._calM > 11) { this._calM = 0; this._calY++; }
-        this._renderRpPop();
-      };
-    });
-    pop.querySelectorAll(".cell").forEach((c) => {
-      c.onclick = (e) => {
-        e.stopPropagation();
-        const iso = c.dataset.iso;
-        if (this._pick == null) { this._pick = iso; this._from = iso; this._to = iso; }
-        else {
-          this._from = this._pick <= iso ? this._pick : iso;
-          this._to = this._pick <= iso ? iso : this._pick;
-          this._pick = null;
-          this._load(); pop.classList.add("hidden");
-        }
-        this._renderRpField(); this._renderRpPop();
-      };
-    });
+    this._rp.mount();
   }
 
   _renderBody() {
@@ -380,7 +300,7 @@ class JarvisLogbook extends HTMLElement {
 
   disconnectedCallback() {
     if (this._unsub) { this._unsub(); this._unsub = null; }
-    if (this._rpOutside) { document.removeEventListener("click", this._rpOutside); this._rpOutside = null; }
+    if (this._rp) { this._rp.destroy(); this._rp = null; }
     closeSheet();
     clearTimeout(this._liveT);
   }
