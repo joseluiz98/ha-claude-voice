@@ -244,16 +244,19 @@ class JarvisLogbook extends HTMLElement {
     const um = this._um();
     const recs = applyFilters(this._records, this._filters);
     this._visibleCache = recs;
+    const multiDia = this._from !== this._to;
     if (this._grouped) {
       const threads = groupByThread(recs);
       this.querySelector("#jl-list").innerHTML = threads.map((t) => {
         const head = t.records[0] || {};
         const inner = t.records.map((r, i) => `
           <tr data-tk="${this._esc(t.sessionId)}" data-i="${i}" class="${r.ok ? "" : "err"} ${this._selected === r ? "sel" : ""}">
-            <td><span class="mono" style="padding-left:14px">${fmtTime(r.ts)}</span></td>
-            <td class="trunc">${this._esc(r.prompt)}</td>
-            <td class="trunc">${this._esc(r.response || (r.error ? "erro: " + r.error : ""))}</td>
-            <td><span class="mono">${fmtDuration(r.durationMs)}</span></td>
+            <td class="c-hora"><span class="mono" style="padding-left:14px">${fmtTime(r.ts)}</span>${
+              multiDia ? `<small class="c-day" style="padding-left:14px">${fmtDate(r.ts)}</small>` : ""
+            }</td>
+            <td class="trunc c-prompt">${this._esc(r.prompt)}</td>
+            <td class="trunc c-resp">${this._esc(r.response || (r.error ? "erro: " + r.error : ""))}</td>
+            <td class="c-dur"><span class="mono">${fmtDuration(r.durationMs)}</span></td>
           </tr>`).join("");
         return `<table><thead><tr><th colspan="4">🧵 ${this._esc(resolveUserName(head.sessionKey, um))} ·
           ${fmtTime(head.ts)} · ${t.records.length} turno(s) · <small>${this._esc(t.sessionId)}</small></th></tr></thead>
@@ -274,18 +277,20 @@ class JarvisLogbook extends HTMLElement {
 
     const rows = recs.map((r, i) => `
       <tr data-i="${i}" class="${r.ok ? "" : "err"} ${this._selected === r ? "sel" : ""}">
-        <td><span class="mono">${fmtDate(r.ts)}</span></td>
-        <td><span class="mono">${fmtTime(r.ts)}</span></td>
-        <td>${this._esc(resolveUserName(r.sessionKey, um))}</td>
-        <td class="trunc">${this._esc(r.prompt)}</td>
-        <td class="trunc">${this._esc(r.response || (r.error ? "erro: " + r.error : ""))}</td>
-        <td><span class="${this._badgeCls(r.mode)}">${this._esc(r.mode || "—")}</span></td>
-        <td><span class="mono">${fmtDuration(r.durationMs)}</span></td>
-        <td><span class="dot ${r.ok ? "ok" : "err"}"></span></td>
+        <td class="c-data"><span class="mono">${fmtDate(r.ts)}</span></td>
+        <td class="c-hora"><span class="mono">${fmtTime(r.ts)}</span>${
+          multiDia ? `<small class="c-day">${fmtDate(r.ts)}</small>` : ""
+        }</td>
+        <td class="c-user">${this._esc(resolveUserName(r.sessionKey, um))}</td>
+        <td class="trunc c-prompt">${this._esc(r.prompt)}</td>
+        <td class="trunc c-resp">${this._esc(r.response || (r.error ? "erro: " + r.error : ""))}</td>
+        <td class="c-mode"><span class="${this._badgeCls(r.mode)}">${this._esc(r.mode || "—")}</span></td>
+        <td class="c-dur"><span class="mono">${fmtDuration(r.durationMs)}</span></td>
+        <td class="c-status"><span class="dot ${r.ok ? "ok" : "err"}"></span></td>
       </tr>`).join("");
     const note = this._unreadable ? `<p class="note">${this._unreadable} linha(s) ilegíveis ignoradas</p>` : "";
     this.querySelector("#jl-list").innerHTML = recs.length
-      ? `<table><thead><tr><th>Data</th><th>Hora</th><th>Usuário</th><th>Prompt</th><th>Resposta</th><th>Modo</th><th>⏱</th><th>✓</th></tr></thead><tbody>${rows}</tbody></table>${note}`
+      ? `<table><thead><tr><th class="c-data">Data</th><th class="c-hora">Hora</th><th class="c-user">Usuário</th><th class="c-prompt">Prompt</th><th class="c-resp">Resposta</th><th class="c-mode">Modo</th><th class="c-dur">⏱</th><th class="c-status">✓</th></tr></thead><tbody>${rows}</tbody></table>${note}`
       : `<p class="empty">Sem interações neste dia.</p>${note}`;
     this.querySelectorAll("#jl-list tbody tr").forEach((tr) => {
       tr.onclick = () => { this._markSelected(tr); this._select(this._visibleCache[Number(tr.dataset.i)]); };

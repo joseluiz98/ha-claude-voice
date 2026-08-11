@@ -113,6 +113,7 @@ export const CSS = `
         .jl tbody tr.sel { background:color-mix(in srgb, var(--jl-accent) 13%, transparent); box-shadow:inset 3px 0 0 var(--jl-accent); }
         .jl .mono { font-family:var(--jl-mono); font-size:var(--jl-fs-sm); color:var(--jl-dim); white-space:nowrap; }
         .jl .trunc { max-width:22vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .jl .c-day { display: none; }
         .jl thead th[colspan] {
           font-family:var(--jl-mono); font-size:var(--jl-fs-sm); text-transform:none; letter-spacing:0;
           color:var(--jl-text); padding-top:16px;
@@ -183,7 +184,21 @@ export const CSS = `
 
         @media (max-width: 760px) {
           .jl .wrap { flex-direction:column; }
-          .jl .trunc { max-width:46vw; }
+          /* table-layout:fixed é o que faz o ellipsis funcionar de verdade: sem
+             ele a célula cresce até caber o conteúdo e a tabela estoura. */
+          .jl table { table-layout: fixed; }
+          .jl thead th, .jl tbody td { padding: 10px 8px; }
+          .jl .c-data, .jl .c-user, .jl .c-mode, .jl .c-dur, .jl .c-status { display: none; }
+          .jl .c-hora { width: 56px; }
+          .jl .c-day {
+            display: block; font-family: var(--jl-mono); font-size: var(--jl-fs-xs);
+            color: var(--jl-dim); white-space: nowrap;
+          }
+          .jl .trunc { max-width: none; width: auto; }
+          /* Trava de segurança. NÃO mover para .jl: overflow-x:hidden faz o
+             overflow-y computar como auto, o elemento vira contêiner de rolagem
+             e o .toolbar sticky passa a grudar nele em vez da viewport. */
+          .jl .list { overflow-x: hidden; }
           .jl .detail {
             position:fixed; inset:auto 0 0 0; width:auto; top:auto; max-height:82vh;
             border-radius:18px 18px 0 0; box-shadow:0 -10px 40px -10px rgba(0,0,0,.5); z-index:20;
@@ -202,6 +217,12 @@ export const CSS = `
             display:block; width:40px; height:4px; margin:-4px auto 10px; border-radius:999px;
             background:var(--jl-border); touch-action:none;
           }
+        }
+        @media (max-width: 480px) {
+          /* 3 colunas em 393pt deixam 123px por coluna ≈ 14 caracteres. Com a
+             Resposta fora, o Prompt fica com ~280px ≈ 31 caracteres, e a
+             resposta continua a um toque no detalhe. */
+          .jl .c-resp { display: none; }
         }
         .jl .detail .d-trace {
           display: flex; flex-direction: column; gap: 0;
