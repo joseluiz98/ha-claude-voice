@@ -3,6 +3,7 @@ import {
   applyFilters, computeStats, groupByThread, presetRange, monthMatrix, shouldShowMenu,
 } from "./format.js";
 import { CSS } from "./styles.js";
+import { openSheet, closeSheet } from "./sheet.js";
 
 function shortToolName(name) {
   return name.replace(/^mcp__[^_]+__/, '');
@@ -337,7 +338,6 @@ class JarvisLogbook extends HTMLElement {
         ts: <b>${this._esc(r.ts)}</b>
       </div>`;
     this.querySelector("#jl-close").onclick = () => this._closeSheet();
-    this._bindSheetDrag();
     this._openSheet();
   }
 
@@ -348,43 +348,18 @@ class JarvisLogbook extends HTMLElement {
   }
 
   _openSheet() {
-    const sc = this.querySelector("#jl-scrim");
-    if (sc) { sc.classList.remove("hidden"); sc.onclick = () => this._closeSheet(); }
-    document.documentElement.classList.add("jl-sheet-open");
+    openSheet({
+      el: this.querySelector("#jl-detail"),
+      scrim: this.querySelector("#jl-scrim"),
+      onClose: () => {
+        this._selected = null;
+        if (this._selEl) { this._selEl.classList.remove("sel"); this._selEl = null; }
+      },
+    });
   }
 
   _closeSheet() {
-    this._selected = null;
-    const d = this.querySelector("#jl-detail");
-    if (d) { d.classList.add("hidden"); d.style.transform = ""; }
-    const sc = this.querySelector("#jl-scrim");
-    if (sc) sc.classList.add("hidden");
-    document.documentElement.classList.remove("jl-sheet-open");
-    if (this._selEl) { this._selEl.classList.remove("sel"); this._selEl = null; }
-  }
-
-  _bindSheetDrag() {
-    const d = this.querySelector("#jl-detail");
-    if (!d) return;
-    const grip = d.querySelector(".d-grip");
-    if (!grip) return;
-    let startY = null, dy = 0;
-    const onStart = (e) => {
-      if (!e.touches || !e.touches.length) return;
-      startY = e.touches[0].clientY; dy = 0; d.style.transition = "none";
-    };
-    const onMove = (e) => {
-      if (startY == null || !e.touches || !e.touches.length) return;
-      dy = e.touches[0].clientY - startY;
-      if (dy > 0) { d.style.transform = `translateY(${dy}px)`; }
-    };
-    const onEnd = () => {
-      d.style.transition = "";
-      if (dy > 90) { this._closeSheet(); }
-      else { d.style.transform = ""; }
-      startY = null; dy = 0;
-    };
-    grip.ontouchstart = onStart; grip.ontouchmove = onMove; grip.ontouchend = onEnd;
+    closeSheet();
   }
 
   _onLive(rec) {
@@ -406,7 +381,7 @@ class JarvisLogbook extends HTMLElement {
   disconnectedCallback() {
     if (this._unsub) { this._unsub(); this._unsub = null; }
     if (this._rpOutside) { document.removeEventListener("click", this._rpOutside); this._rpOutside = null; }
-    document.documentElement.classList.remove("jl-sheet-open");
+    closeSheet();
     clearTimeout(this._liveT);
   }
 }
