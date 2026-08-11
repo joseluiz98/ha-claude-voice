@@ -113,3 +113,13 @@ export function monthMatrix(year, month) {
 export function shouldShowMenu({ narrow, dockedSidebar }) {
   return Boolean(narrow) || dockedSidebar === "always_hidden";
 }
+
+// Replica os dois níveis de resposta do ha-date-range-picker nativo do HA, que
+// usa breakpoints diferentes de propósito: ha-date-range-picker.ts:288 escolhe
+// folha vs popover, date-range-picker.ts:397 escolhe chips vs lista.
+// O teto de altura cobre o celular deitado — largo o bastante, baixo demais.
+export function pickerLayout({ width, height }) {
+  const folha = width <= 870 || height <= 500;
+  const chips = width <= 450 || height <= 500;
+  return { container: folha ? "sheet" : "popover", presets: chips ? "chips" : "list" };
+}

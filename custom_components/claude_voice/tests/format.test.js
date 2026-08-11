@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   resolveUserName, fmtDuration, localISODate, applyFilters, computeStats, groupByThread,
-  presetRange, monthMatrix, shouldShowMenu,
+  presetRange, monthMatrix, shouldShowMenu, pickerLayout,
 } from "../frontend/format.js";
 
 test("localISODate retorna YYYY-MM-DD local e trata inválido", () => {
@@ -87,4 +87,23 @@ test("shouldShowMenu: mesma condição do ha-panel-app do HA", () => {
   assert.equal(shouldShowMenu({ narrow: false, dockedSidebar: "always_hidden" }), true);
   // o HA pode ainda não ter setado as props
   assert.equal(shouldShowMenu({ narrow: undefined, dockedSidebar: undefined }), false);
+});
+
+test("pickerLayout: fronteiras dos dois breakpoints do HA", () => {
+  const l = (width, height) => pickerLayout({ width, height });
+  // desktop
+  assert.deepEqual(l(1280, 800), { container: "popover", presets: "list" });
+  // fronteira do container: 870 é folha, 871 ainda é popover
+  assert.deepEqual(l(871, 800), { container: "popover", presets: "list" });
+  assert.deepEqual(l(870, 800), { container: "sheet", presets: "list" });
+  // fronteira dos presets: 450 vira chips, 451 ainda é lista
+  assert.deepEqual(l(451, 800), { container: "sheet", presets: "list" });
+  assert.deepEqual(l(450, 800), { container: "sheet", presets: "chips" });
+});
+
+test("pickerLayout: altura baixa decide sozinha (celular deitado)", () => {
+  // 852px de largura sozinha daria popover/list; é o max-height:500 que decide.
+  // Sem este caso, o breakpoint de altura pode ser removido por engano.
+  assert.deepEqual(pickerLayout({ width: 852, height: 393 }), { container: "sheet", presets: "chips" });
+  assert.deepEqual(pickerLayout({ width: 393, height: 852 }), { container: "sheet", presets: "chips" });
 });
