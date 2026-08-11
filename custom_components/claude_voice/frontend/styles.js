@@ -211,7 +211,13 @@ export const CSS = `
           max-height: 88vh; overflow: auto; overscroll-behavior: contain;
           padding: 8px 12px 20px; background: var(--jl-surface);
           border-radius: 18px 18px 0 0; box-shadow: 0 -10px 40px -10px rgba(0,0,0,.5);
-          animation: jl-sheet .22s ease both;
+          /* backwards, não both: "both" persiste o frame "to" (transform:none)
+             depois dos 220ms, e esse valor vindo de animação vence o
+             transform inline não-!important que o arrasto (sheet.js) escreve
+             durante o gesto — a folha para de acompanhar o dedo. backwards só
+             aplica o frame "from" antes de começar (o que faz subir de
+             baixo) e não deixa nada preso depois. */
+          animation: jl-sheet .22s ease backwards;
         }
         .jl .rp-sheet.hidden { display: none; }
         .jl .rp-sheet .d-grip {
@@ -263,7 +269,13 @@ export const CSS = `
           .jl .detail {
             position:fixed; inset:auto 0 0 0; width:auto; top:auto; max-height:82vh;
             border-radius:18px 18px 0 0; box-shadow:0 -10px 40px -10px rgba(0,0,0,.5); z-index:20;
-            animation:jl-sheet .22s ease both;
+            /* backwards, não both — mesmo raciocínio do .jl .rp-sheet acima:
+               "both" prendia transform:none depois da animação e o arrasto da
+               alça nunca acompanhava o dedo aqui embaixo de 760px. Defeito
+               pré-existente (não introduzido pela correção do I1: aqui a
+               animação sempre esteve dentro deste media query), corrigido
+               junto por ser a mesma declaração e o mesmo mecanismo. */
+            animation:jl-sheet .22s ease backwards;
           }
           /* Propriedades visuais completas já vivem na regra base de .jl .scrim;
              aqui só alterna display para quem abriu o detalhe como folha. */
