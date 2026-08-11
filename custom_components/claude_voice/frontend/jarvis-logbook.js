@@ -1,6 +1,6 @@
 import {
   resolveUserName, fmtDuration, fmtTime, fmtDate, localISODate,
-  applyFilters, computeStats, groupByThread, presetRange, monthMatrix,
+  applyFilters, computeStats, groupByThread, presetRange, monthMatrix, shouldShowMenu,
 } from "./format.js";
 import { CSS } from "./styles.js";
 
@@ -21,13 +21,16 @@ class JarvisLogbook extends HTMLElement {
     this._grouped = false;
     this._selected = null;
     this._visibleCache = [];
+    this._narrow = false;
   }
 
   set hass(hass) {
     this._hass = hass;
+    this._syncHeader();
     if (this._inited) return;
     this._inited = true;
     this._render();
+    this._syncHeader();
     this._load();
     this._hass.connection
       .subscribeEvents((ev) => this._onLive(ev.data), "claude_voice_conversation")
@@ -42,6 +45,22 @@ class JarvisLogbook extends HTMLElement {
       });
   }
   get hass() { return this._hass; }
+
+  set narrow(v) { this._narrow = !!v; this._syncHeader(); }
+  get narrow() { return this._narrow; }
+
+  // No-op enquanto o header não existir no DOM: a primeira chamada de `set hass`
+  // acontece antes do _render(). Assim a ordem de chegada de `hass` e `narrow`,
+  // que o HA não garante, deixa de importar.
+  _syncHeader() {
+    const root = this.querySelector(".jl");
+    if (!root) return;
+    const show = shouldShowMenu({
+      narrow: this._narrow,
+      dockedSidebar: this._hass && this._hass.dockedSidebar,
+    });
+    root.dataset.menu = show ? "1" : "0";
+  }
 
   _um() {
     return (this.panel && this.panel.config && this.panel.config.user_names) || {};
@@ -86,6 +105,14 @@ class JarvisLogbook extends HTMLElement {
     this.innerHTML = `
       <style>${CSS}</style>
       <div class="jl">
+        <div class="jl-hdr">
+          <button class="jl-menu" id="jl-menu" aria-label="Abrir menu" title="Abrir menu">
+            <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+              <path d="M3,6H21V8H3V6M3,11H21V13H3V11M3,16H21V18H3V16Z"></path>
+            </svg>
+          </button>
+          <div class="jl-title">Jarvis Logbook</div>
+        </div>
         <div class="toolbar">
           <div class="stats" id="jl-stats"></div>
           <div class="filters" id="jl-filters"></div>
@@ -96,6 +123,11 @@ class JarvisLogbook extends HTMLElement {
           <div class="detail hidden" id="jl-detail"></div>
         </div>
       </div>`;
+    // bubbles + composed é o que faz o evento atravessar o shadow DOM do
+    // ha-panel-custom e chegar ao <home-assistant>, que é quem escuta.
+    this.querySelector("#jl-menu").onclick = () => {
+      this.dispatchEvent(new CustomEvent("hass-toggle-menu", { bubbles: true, composed: true }));
+    };
     this._buildFilters();
     this._renderBody();
   }

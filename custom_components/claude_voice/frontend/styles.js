@@ -31,8 +31,26 @@ export const CSS = `
         }
         @keyframes jl-fade { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
 
+        .jl .jl-hdr {
+          position: sticky; top: 0; z-index: 4;
+          display: flex; align-items: center; gap: 4px;
+          height: var(--header-height, 56px); padding: 0 8px;
+          background: color-mix(in srgb, var(--jl-bg) 88%, transparent);
+          -webkit-backdrop-filter: saturate(1.4) blur(8px); backdrop-filter: saturate(1.4) blur(8px);
+          border-bottom: 1px solid var(--jl-border);
+        }
+        .jl .jl-menu {
+          display: none; align-items: center; justify-content: center;
+          flex: 0 0 auto; width: 48px; height: 48px; padding: 0; cursor: pointer;
+          border: none; border-radius: 50%; background: transparent; color: var(--jl-text);
+        }
+        .jl[data-menu="1"] .jl-menu { display: inline-flex; }
+        .jl .jl-menu svg { fill: currentColor; }
+        .jl .jl-menu:hover { background: color-mix(in srgb, var(--jl-text) 10%, transparent); }
+        .jl .jl-title { font-size: var(--jl-fs-lg); font-weight: 600; letter-spacing: -.01em; }
+
         .jl .toolbar {
-          position: sticky; top: 0; z-index: 3;
+          position: sticky; top: var(--header-height, 56px); z-index: 3;
           background: color-mix(in srgb, var(--jl-bg) 88%, transparent);
           -webkit-backdrop-filter: saturate(1.4) blur(8px); backdrop-filter: saturate(1.4) blur(8px);
           padding: 16px 18px 12px; border-bottom: 1px solid var(--jl-border);
@@ -108,7 +126,8 @@ export const CSS = `
 
         .jl .detail {
           width:340px; flex-shrink:0; align-self:flex-start;
-          position:sticky; top:108px; max-height:calc(100vh - 132px); overflow:auto;
+          position:sticky; top: calc(var(--header-height, 56px) + 52px);
+          max-height: calc(100vh - var(--header-height, 56px) - 76px); overflow:auto;
           border:1px solid var(--jl-border); border-radius:15px; background:var(--jl-surface);
           padding:16px 18px 20px; box-shadow:0 10px 34px -18px rgba(0,0,0,.4);
           animation:jl-slide .2s ease both;

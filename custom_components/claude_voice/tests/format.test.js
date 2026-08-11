@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   resolveUserName, fmtDuration, localISODate, applyFilters, computeStats, groupByThread,
-  presetRange, monthMatrix,
+  presetRange, monthMatrix, shouldShowMenu,
 } from "../frontend/format.js";
 
 test("localISODate retorna YYYY-MM-DD local e trata inválido", () => {
@@ -75,4 +75,16 @@ test("monthMatrix: fevereiro/2021 cabe em 4 linhas (sem semana extra fora do mê
   assert.equal(m.length, 4);
   assert.equal(m[0][0].getDate(), 1);   // 1/fev/2021 é segunda
   assert.equal(m[3][6].getDate(), 28);  // termina em 28/fev (domingo)
+});
+
+test("shouldShowMenu: mesma condição do ha-panel-app do HA", () => {
+  // no celular a sidebar é retrátil — o botão é a única saída
+  assert.equal(shouldShowMenu({ narrow: true, dockedSidebar: "auto" }), true);
+  // desktop com sidebar fixa: o botão seria redundante
+  assert.equal(shouldShowMenu({ narrow: false, dockedSidebar: "docked" }), false);
+  assert.equal(shouldShowMenu({ narrow: false, dockedSidebar: "auto" }), false);
+  // quem escolheu "ocultar sempre" no perfil precisa do botão em qualquer largura
+  assert.equal(shouldShowMenu({ narrow: false, dockedSidebar: "always_hidden" }), true);
+  // o HA pode ainda não ter setado as props
+  assert.equal(shouldShowMenu({ narrow: undefined, dockedSidebar: undefined }), false);
 });

@@ -106,3 +106,10 @@ export function monthMatrix(year, month) {
   while (weeks.length && weeks[weeks.length - 1].every((d) => d.getMonth() !== month)) weeks.pop();
   return weeks;
 }
+
+// Espelha a condição do ha-panel-app do HA: o botão de menu aparece quando a
+// sidebar não está visível por si só. Painel custom não ganha barra do HA — se
+// não desenharmos o botão, o usuário no celular fica sem saída do painel.
+export function shouldShowMenu({ narrow, dockedSidebar }) {
+  return Boolean(narrow) || dockedSidebar === "always_hidden";
+}
