@@ -83,6 +83,14 @@ export const CSS = `
           outline:none; border-color:var(--jl-accent);
           box-shadow:0 0 0 3px color-mix(in srgb, var(--jl-accent) 22%, transparent);
         }
+        .jl .jl-menu:focus-visible,
+        .jl .rp-field:focus-visible,
+        .jl .rp-presets button:focus-visible,
+        .jl .rp-cal-head button:focus-visible,
+        .jl .rp-grid .cell:focus-visible,
+        .jl #jl-close:focus-visible {
+          outline: 2px solid var(--jl-accent); outline-offset: 2px;
+        }
         .jl .filters #jl-q { flex:1 1 180px; min-width:150px; }
         /* flex:0 0 auto proíbe o encolhimento em vez de contar com o min-width:auto
            calcular o tamanho intrínseco certo — que é onde o WebKit diverge, e o
@@ -285,6 +293,8 @@ export const CSS = `
             display:block; width:40px; height:4px; margin:-4px auto 10px; border-radius:999px;
             background:var(--jl-border); touch-action:none;
           }
+          /* 26px é o alvo atual, e é o botão de fechar a folha no celular */
+          .jl .detail #jl-close { width: 40px; height: 40px; font-size: var(--jl-fs-xl); }
         }
         @media (max-width: 480px) {
           /* 3 colunas em 393pt deixam 123px por coluna ≈ 14 caracteres. Com a
@@ -318,5 +328,13 @@ export const CSS = `
           white-space: normal; overflow-wrap: anywhere;
           display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3;
           overflow: hidden; line-height: 1.35; opacity: .8;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .jl, .jl *, .jl *::before, .jl *::after {
+            animation-duration: .001ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: .001ms !important;
+          }
+          .jl .live:not(:empty)::before { animation: none; opacity: 1; }
         }
 `;

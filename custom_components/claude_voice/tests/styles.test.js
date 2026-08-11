@@ -30,3 +30,10 @@ test("CSS trava o encolhimento do campo de data e dos presets", () => {
     "os presets precisam de flex:0 0 auto, senão são comprimidos e o texto se sobrepõe"
   );
 });
+
+test("CSS respeita prefers-reduced-motion", () => {
+  assert.ok(
+    CSS.includes("prefers-reduced-motion"),
+    "o painel tem uma animação infinita (jl-pulse) e precisa da guarda"
+  );
+});
