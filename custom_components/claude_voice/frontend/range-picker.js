@@ -1,12 +1,18 @@
-import { localISODate, monthMatrix, presetRange, pickerLayout } from "./format.js";
-import { openSheet, closeSheet, currentSheetEl } from "./sheet.js";
+import { localISODate, monthMatrix, presetRange, pickerLayout, PICKER_BREAKPOINTS } from "./format.js";
+import { openSheet, closeSheet, currentSheetEl, bindSheetDrag } from "./sheet.js";
 
 const PRESETS = [
   ["today", "Hoje"], ["yesterday", "Ontem"], ["week", "Esta semana"],
   ["month", "Este mês"], ["last7", "Últimos 7 dias"], ["last30", "Últimos 30 dias"],
 ];
 const DOW = ["S", "T", "Q", "Q", "S", "S", "D"];
-const CONSULTAS = ["(max-width: 870px)", "(max-height: 500px)", "(max-width: 450px)"];
+// Derivadas de PICKER_BREAKPOINTS (format.js), não repetidas como literais: se
+// os limiares do pickerLayout() mudarem, o gatilho de re-layout muda junto.
+const CONSULTAS = [
+  `(max-width: ${PICKER_BREAKPOINTS.sheetWidth}px)`,
+  `(max-height: ${PICKER_BREAKPOINTS.sheetHeight}px)`,
+  `(max-width: ${PICKER_BREAKPOINTS.chipsWidth}px)`,
+];
 
 export class RangePicker {
   constructor({ host, sheetEl, scrim, from, to, onChange }) {
@@ -57,7 +63,22 @@ export class RangePicker {
     alvo.dataset.presets = layout.presets;
     this._renderConteudo(alvo, this.modo === "sheet");
     if (this.modo === "sheet") {
-      openSheet({ el: this.sheetEl, scrim: this.scrim, onClose: () => { this.aberto = false; } });
+      // #jl-scrim é compartilhado com o detalhe do registro, que também abre
+      // via openSheet() — inclusive no desktop, onde ele é coluna lateral, não
+      // folha. O marcador [data-rp] existe só enquanto É o picker quem está
+      // com a folha aberta, para o CSS decidir visibilidade (e a trava de
+      // scroll do <html>) sem reintroduzir o limiar 870/500 duplicado em CSS.
+      this.scrim.dataset.rp = "1";
+      document.documentElement.classList.add("jl-rp-sheet-open");
+      openSheet({
+        el: this.sheetEl,
+        scrim: this.scrim,
+        onClose: () => {
+          this.aberto = false;
+          delete this.scrim.dataset.rp;
+          document.documentElement.classList.remove("jl-rp-sheet-open");
+        },
+      });
     } else {
       alvo.classList.remove("hidden");
     }
@@ -104,6 +125,12 @@ export class RangePicker {
         </div>
       </div>`;
     this._ligar(alvo);
+    // _renderConteudo() reescreve alvo.innerHTML por inteiro — inclusive numa
+    // navegação de mês ou no 1º clique de um novo range — o que troca o nó
+    // .d-grip e derruba os handlers de touch que o openSheet() ligou na
+    // abertura. Rebind idempotente: sem custo perceptível, e sem isto o
+    // arrastar-para-fechar morre no primeiro re-render.
+    if (comAlca) bindSheetDrag(alvo);
   }
 
   _ligar(alvo) {

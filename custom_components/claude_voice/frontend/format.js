@@ -114,12 +114,18 @@ export function shouldShowMenu({ narrow, dockedSidebar }) {
   return Boolean(narrow) || dockedSidebar === "always_hidden";
 }
 
+// Fonte única dos limiares do picker. range-picker.js monta suas media queries
+// de matchMedia a partir daqui — se isto mudar, o listener de re-layout muda
+// junto, em vez de derivar silenciosamente do pickerLayout() abaixo.
+export const PICKER_BREAKPOINTS = { sheetWidth: 870, sheetHeight: 500, chipsWidth: 450 };
+
 // Replica os dois níveis de resposta do ha-date-range-picker nativo do HA, que
 // usa breakpoints diferentes de propósito: ha-date-range-picker.ts:288 escolhe
 // folha vs popover, date-range-picker.ts:397 escolhe chips vs lista.
 // O teto de altura cobre o celular deitado — largo o bastante, baixo demais.
 export function pickerLayout({ width, height }) {
-  const folha = width <= 870 || height <= 500;
-  const chips = width <= 450 || height <= 500;
+  const { sheetWidth, sheetHeight, chipsWidth } = PICKER_BREAKPOINTS;
+  const folha = width <= sheetWidth || height <= sheetHeight;
+  const chips = width <= chipsWidth || height <= sheetHeight;
   return { container: folha ? "sheet" : "popover", presets: chips ? "chips" : "list" };
 }

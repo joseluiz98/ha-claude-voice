@@ -7,6 +7,12 @@ export const CSS = `
         @media (max-width: 760px) {
           :root.jl-sheet-open, html.jl-sheet-open body { overflow:hidden !important; }
         }
+        /* Trava de scroll da folha do date picker. Sem media query de propósito:
+           quem decide "isto é folha" é o pickerLayout() (format.js), não o CSS —
+           a classe só existe no <html> quando o RangePicker escolheu modo folha,
+           então duplicar o limiar aqui reintroduziria exatamente o vão que a I1
+           corrigiu (760px do .detail vs 870/500 do picker). */
+        :root.jl-rp-sheet-open, html.jl-rp-sheet-open body { overflow:hidden !important; }
         .jl {
           --jl-mono: ui-monospace, "SF Mono", SFMono-Regular, "JetBrains Mono", "Roboto Mono", Menlo, Consolas, monospace;
           --jl-accent: var(--primary-color, #2f6df6);
@@ -30,6 +36,11 @@ export const CSS = `
           animation: jl-fade .32s ease both;
         }
         @keyframes jl-fade { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
+        /* Içado para fora de qualquer @media: keyframes só produzem efeito onde
+           são referenciados (.detail em mobile, .rp-sheet do picker em telas
+           mais largas que 760px) — aninhado numa media query, ficaria inerte
+           fora dela. */
+        @keyframes jl-sheet { from { transform:translateY(100%); } to { transform:none; } }
 
         .jl .jl-hdr {
           position: sticky; top: 0; z-index: 4;
@@ -150,7 +161,18 @@ export const CSS = `
         .jl .detail .d-body { font-size:var(--jl-fs); line-height:1.5; white-space:pre-wrap; word-break:break-word; }
         .jl .detail .meta { font-family:var(--jl-mono); font-size:var(--jl-fs-sm); line-height:1.85; color:var(--jl-dim); word-break:break-all; }
         .jl .detail .meta b { color:var(--jl-text); font-weight:600; }
-        .jl .scrim { display:none; }
+        .jl .scrim {
+          display: none;
+          position: fixed; inset: 0; z-index: 19; background: rgba(0,0,0,.5);
+          -webkit-backdrop-filter: blur(1px); backdrop-filter: blur(1px);
+          touch-action: none; animation: jl-fade .18s ease both;
+        }
+        /* Mesmo raciocínio da trava de scroll: [data-rp] é setado pelo
+           RangePicker só quando pickerLayout() escolheu modo folha — sem media
+           query aqui, para não duplicar o limiar 870/500 e reabrir o vão da I1.
+           O #jl-detail nunca marca data-rp, então continua sem scrim fora do
+           bloco de 760px logo abaixo, exatamente como hoje. */
+        .jl .scrim[data-rp]:not(.hidden) { display: block; }
         .jl .detail .d-grip { display:none; }
 
         .jl .rp { position:relative; display:inline-block; }
@@ -243,14 +265,9 @@ export const CSS = `
             border-radius:18px 18px 0 0; box-shadow:0 -10px 40px -10px rgba(0,0,0,.5); z-index:20;
             animation:jl-sheet .22s ease both;
           }
-          @keyframes jl-sheet { from { transform:translateY(100%); } to { transform:none; } }
-          .jl .scrim {
-            display:block;
-            position:fixed; inset:0; z-index:19; background:rgba(0,0,0,.5);
-            -webkit-backdrop-filter:blur(1px); backdrop-filter:blur(1px);
-            touch-action:none; animation:jl-fade .18s ease both;
-          }
-          .jl .scrim.hidden { display:none; }
+          /* Propriedades visuais completas já vivem na regra base de .jl .scrim;
+             aqui só alterna display para quem abriu o detalhe como folha. */
+          .jl .scrim:not(.hidden) { display:block; }
           .jl .detail { overscroll-behavior:contain; }
           .jl .detail .d-grip {
             display:block; width:40px; height:4px; margin:-4px auto 10px; border-radius:999px;

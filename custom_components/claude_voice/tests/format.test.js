@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   resolveUserName, fmtDuration, localISODate, applyFilters, computeStats, groupByThread,
-  presetRange, monthMatrix, shouldShowMenu, pickerLayout,
+  presetRange, monthMatrix, shouldShowMenu, pickerLayout, PICKER_BREAKPOINTS,
 } from "../frontend/format.js";
 
 test("localISODate retorna YYYY-MM-DD local e trata inválido", () => {
@@ -106,4 +106,20 @@ test("pickerLayout: altura baixa decide sozinha (celular deitado)", () => {
   // Sem este caso, o breakpoint de altura pode ser removido por engano.
   assert.deepEqual(pickerLayout({ width: 852, height: 393 }), { container: "sheet", presets: "chips" });
   assert.deepEqual(pickerLayout({ width: 393, height: 852 }), { container: "sheet", presets: "chips" });
+});
+
+// Guarda de regressão (I2, revisão da Task 7): range-picker.js monta seu
+// matchMedia a partir de PICKER_BREAKPOINTS, não de literais copiados. Este
+// teste usa a MESMA constante para achar a borda — se o limiar mudar, o teste
+// migra junto e continua provando que pickerLayout() decide exatamente nela.
+// Um teste com números fixos (870/450/500) não pegaria o listener parando de
+// reagir na nova fronteira depois de uma mudança na constante.
+test("PICKER_BREAKPOINTS é a única fonte dos limiares: pickerLayout decide na borda exata da constante", () => {
+  const { sheetWidth, sheetHeight, chipsWidth } = PICKER_BREAKPOINTS;
+  assert.equal(pickerLayout({ width: sheetWidth, height: 800 }).container, "sheet");
+  assert.equal(pickerLayout({ width: sheetWidth + 1, height: 800 }).container, "popover");
+  assert.equal(pickerLayout({ width: chipsWidth, height: 800 }).presets, "chips");
+  assert.equal(pickerLayout({ width: chipsWidth + 1, height: 800 }).presets, "list");
+  assert.equal(pickerLayout({ width: 900, height: sheetHeight }).container, "sheet");
+  assert.equal(pickerLayout({ width: 900, height: sheetHeight + 1 }).container, "popover");
 });

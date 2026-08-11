@@ -18,7 +18,7 @@ export function openSheet({ el, scrim, onClose }) {
   }
   document.documentElement.classList.add("jl-sheet-open");
   atual = { el, scrim, onClose: onClose || null };
-  bindDrag(el);
+  bindSheetDrag(el);
 }
 
 export function closeSheet() {
@@ -35,7 +35,10 @@ export function closeSheet() {
 }
 
 // Arrastar a alça para baixo dispensa a folha. Sem alça, não há gesto.
-function bindDrag(el) {
+// Exportado: consumidores cujo miolo reescreve o innerHTML depois de abrir
+// (ex.: RangePicker ao navegar de mês) trocam a .d-grip por um nó novo, sem os
+// handlers — precisam poder rechamar isto após cada re-render.
+export function bindSheetDrag(el) {
   const grip = el.querySelector(".d-grip");
   if (!grip) return;
   let inicioY = null;
