@@ -88,23 +88,33 @@ export const CSS = `
         .jl .rp-presets button:focus-visible,
         .jl .rp-cal-head button:focus-visible,
         .jl .rp-grid .cell:focus-visible,
+        .jl .filters #jl-refresh:focus-visible,
         .jl #jl-close:focus-visible {
           outline: 2px solid var(--jl-accent); outline-offset: 2px;
         }
         .jl .filters #jl-q { flex:1 1 180px; min-width:150px; }
-        /* flex:0 0 auto proíbe o encolhimento em vez de contar com o min-width:auto
-           calcular o tamanho intrínseco certo — que é onde o WebKit diverge, e o
-           consumo é em iPhone. */
+        /* O campo de data tem largura natural (white-space:nowrap no .rp-field).
+           flex:0 0 auto só impede que a linha do flex o comprima abaixo disso;
+           max-width:100% é o teto que faz o ellipsis do .rp-field ser alcançável
+           num intervalo longo em tela estreita, em vez de estourar a toolbar.
+           NÃO existe aqui nenhuma regra genérica de ".filters button": o campo de
+           data É um <button class="rp-field"> dentro de .filters (e o popover do
+           picker também vive aqui dentro, com seus presets, setas e células).
+           Um seletor de botão genérico neste escopo casaria em todos eles e
+           venceria por especificidade — foi exatamente assim que o campo de data
+           ficou preso em 32px. Estilo de botão aqui: sempre por id/classe. */
         .jl .filters > #jl-range { flex: 0 0 auto; max-width: 100%; }
-        .jl .rp-field { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
-        .jl .filters button {
-          font:inherit; font-family:var(--jl-mono); font-size:var(--jl-fs-lg); line-height:1; cursor:pointer;
-          width:32px; height:32px; color:var(--jl-text);
+        .jl .filters label { display:inline-flex; align-items:center; gap:6px; font-size:var(--jl-fs); color:var(--jl-dim); cursor:pointer; }
+        /* Injetado por jarvis-logbook.js dentro de #jl-live quando a inscrição de
+           realtime falha ("↻ atualizar"). É um botão de texto: largura pelo
+           conteúdo, altura pelo padding — nunca uma caixa quadrada. */
+        .jl .filters #jl-refresh {
+          font:inherit; font-family:var(--jl-mono); font-size:var(--jl-fs-sm); line-height:1.2; cursor:pointer;
+          padding:6px 11px; color:var(--jl-text); white-space:nowrap;
           border:1px solid var(--jl-border); border-radius:9px; background:var(--jl-surface);
           transition:background .12s, border-color .12s;
         }
-        .jl .filters button:hover { background:color-mix(in srgb, var(--jl-accent) 12%, var(--jl-surface)); border-color:var(--jl-accent); }
-        .jl .filters label { display:inline-flex; align-items:center; gap:6px; font-size:var(--jl-fs); color:var(--jl-dim); cursor:pointer; }
+        .jl .filters #jl-refresh:hover { background:color-mix(in srgb, var(--jl-accent) 12%, var(--jl-surface)); border-color:var(--jl-accent); }
         .jl .live {
           margin-left:auto; font-family:var(--jl-mono); font-size:var(--jl-fs-sm); font-weight:600;
           color:var(--jl-ok); display:inline-flex; align-items:center; gap:6px; letter-spacing:.02em;
@@ -183,10 +193,19 @@ export const CSS = `
         .jl .scrim[data-rp]:not(.hidden) { display: block; }
         .jl .detail .d-grip { display:none; }
 
-        .jl .rp { position:relative; display:inline-block; }
+        .jl .rp { position:relative; display:inline-block; max-width:100%; }
+        /* Bloco ÚNICO do campo de data — os dois blocos que existiam (um só com o
+           teto/ellipsis, outro com a caixa) viviam a 88 linhas de distância e
+           foram o que escondeu, na revisão, que algo mais estava fixando a
+           largura. Largura = conteúdo (nowrap); max-width:100% + ellipsis são a
+           rede para um intervalo longo ("2026-08-01 → 2026-08-31") numa toolbar
+           estreita: sem eles o botão estoura a linha, com eles ele encolhe até o
+           teto do #jl-range e degrada em reticências. No caso normal nenhum dos
+           dois tem efeito. */
         .jl .rp-field {
           font:inherit; font-size:var(--jl-fs); padding:6px 11px; cursor:pointer; white-space:nowrap;
           border:1px solid var(--jl-border); border-radius:9px; background:var(--jl-surface); color:var(--jl-text);
+          max-width:100%; overflow:hidden; text-overflow:ellipsis;
         }
         .jl .rp-pop {
           position:absolute; z-index:30; top:calc(100% + 6px); left:0; display:flex; gap:0;
@@ -206,7 +225,15 @@ export const CSS = `
         .jl .rp-cal-head button { font:inherit; cursor:pointer; border:none; background:transparent; color:var(--jl-text); font-size:var(--jl-fs-lg); width:32px; height:32px; border-radius:8px; }
         .jl .rp-grid { display:grid; grid-template-columns:repeat(7,34px); gap:2px; }
         .jl .rp-grid .dow { text-align:center; font-size:var(--jl-fs-xs); color:var(--jl-dim); padding-bottom:4px; }
-        .jl .rp-grid .cell { text-align:center; padding:7px 0; border-radius:8px; cursor:pointer; font-size:var(--jl-fs); }
+        /* Bloco único da célula do calendário. As declarações de reset de botão
+           (font/border/background/color) vinham num segundo bloco lá embaixo,
+           herdado de quando a célula era <span>; fundidas aqui. A ordem não muda
+           nada: todo modificador (.out, .in, .edge, :hover) tem 4 classes de
+           especificidade contra as 3 desta regra e continua vencendo. */
+        .jl .rp-grid .cell {
+          font:inherit; font-size:var(--jl-fs); text-align:center; padding:7px 0;
+          border:none; border-radius:8px; background:transparent; color:var(--jl-text); cursor:pointer;
+        }
         .jl .rp-grid .cell.out { color:var(--jl-dim); opacity:.5; }
         .jl .rp-grid .cell:hover { background:color-mix(in srgb, var(--jl-accent) 14%, transparent); }
         .jl .rp-grid .cell.in { background:color-mix(in srgb, var(--jl-accent) 16%, transparent); }
@@ -233,10 +260,6 @@ export const CSS = `
           border-radius: 999px; background: var(--jl-border); touch-action: none;
         }
         .jl .rp-inner { display: flex; }
-        .jl .rp-grid .cell {
-          font: inherit; font-size: var(--jl-fs); border: none; background: transparent;
-          color: var(--jl-text);
-        }
 
         /* presets como faixa de chips rolável */
         .jl [data-presets="chips"] .rp-inner { flex-direction: column; }
