@@ -1,7 +1,8 @@
 // CSS do painel Jarvis Logbook.
-// Servido como JS de propósito, e não como .css: um segundo estático atrás do
-// Cloudflare precisaria do mesmo cache-bust ?v=VERSION, e quando ficasse velho
-// não quebraria com erro — só renderizaria torto.
+// Servido como JS de propósito, e não como .css: um .css seria um estático a
+// mais atrás do Cloudflare e, quando ficasse velho, não quebraria com erro —
+// só renderizaria torto. Como módulo ES ele herda o segmento de versão do
+// caminho estático (STATIC_URL/VERSION/…), igual aos demais imports relativos.
 export const CSS = `
         jarvis-logbook { display:block; }
         @media (max-width: 760px) {
