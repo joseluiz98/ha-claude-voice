@@ -207,6 +207,17 @@ export const CSS = `
           font:inherit; font-size:var(--jl-fs); padding:6px 11px; cursor:pointer; white-space:nowrap;
           border:1px solid var(--jl-border); border-radius:9px; background:var(--jl-surface); color:var(--jl-text);
           max-width:100%; overflow:hidden; text-overflow:ellipsis;
+          transition:background .12s, border-color .12s;
+        }
+        /* O realce de hover do campo vinha de carona na regra órfã
+           ".jl .filters button" — a mesma que o esmagava em 32px. Removida ela,
+           o campo ficou sem nenhuma resposta ao mouse. Devolvido aqui com o
+           padrão dos outros controles (#jl-refresh, presets, células): tinta de
+           acento no fundo e na borda. Por classe, nunca por seletor genérico de
+           botão dentro de .filters — ver o comentário do #jl-range acima. */
+        .jl .rp-field:hover {
+          background:color-mix(in srgb, var(--jl-accent) 12%, var(--jl-surface));
+          border-color:var(--jl-accent);
         }
         .jl .rp-pop {
           position:absolute; z-index:30; top:calc(100% + 6px); left:0; display:flex; gap:0;
