@@ -1,10 +1,16 @@
 import {
   resolveUserName, fmtDuration, fmtTime, fmtDate, localISODate,
   applyFilters, computeStats, groupByThread, shouldShowMenu, detailLayout,
+  DETAIL_SHEET_MAX_WIDTH,
 } from "./format.js";
 import { CSS } from "./styles.js";
-import { openSheet, closeSheet, currentSheetEl } from "./sheet.js";
+import { openSheet, closeSheet, currentSheetEl, releaseSheet } from "./sheet.js";
 import { RangePicker } from "./range-picker.js";
+
+// Derivada do limiar do detalhe (format.js), não repetida como literal — mesmo
+// contrato que o range-picker.js tem com PICKER_BREAKPOINTS: se o limiar mudar,
+// o gatilho de reconciliação muda junto.
+const CONSULTA_DETALHE = `(max-width: ${DETAIL_SHEET_MAX_WIDTH}px)`;
 
 function shortToolName(name) {
   return name.replace(/^mcp__[^_]+__/, '');
@@ -131,8 +137,48 @@ class JarvisLogbook extends HTMLElement {
     this.querySelector("#jl-menu").onclick = () => {
       this.dispatchEvent(new CustomEvent("hass-toggle-menu", { bubbles: true, composed: true }));
     };
+    this._montarObservadorDeRegime();
     this._buildFilters();
     this._renderBody();
+  }
+
+  // Girar o aparelho cruza os 760px nas duas direções (iPhone: 844px deitado,
+  // 390px em pé), e o CSS troca o desenho do .detail sozinho — coluna lateral
+  // acima do limiar, folha abaixo. Sem observar isso, o sheet.js ficava sabendo
+  // apenas do regime vigente na hora de ABRIR: um detalhe aberto deitado e
+  // girado para retrato virava folha à revelia do mecanismo, e abrir o seletor
+  // de datas nesse estado empilhava duas folhas.
+  // Montado aqui (uma vez, junto com o resto) e desmontado no
+  // disconnectedCallback, no mesmo ciclo de vida do realtime e do RangePicker.
+  // Registrado ANTES do _buildFilters(): assim, numa rotação com o picker
+  // aberto, o detalhe reassume a folha primeiro e o _onMq do picker sai cedo
+  // (this.aberto já é false) em vez de reabrir uma folha que seria fechada logo
+  // em seguida.
+  _montarObservadorDeRegime() {
+    if (this._mqDetalhe) return;
+    this._mqDetalhe = window.matchMedia(CONSULTA_DETALHE);
+    this._onRegime = () => this._reconciliarDetalhe();
+    this._mqDetalhe.addEventListener("change", this._onRegime);
+  }
+
+  // Reconciliar = fazer a participação do detalhe no mecanismo de folha seguir
+  // o CSS, sem fechar nada. Fechar ao cruzar o limiar seria mais simples, mas
+  // apaga trabalho do usuário (a leitura em curso e a seleção) por um motivo
+  // que, para ele, é apenas "virei o telefone". Nas duas direções o detalhe
+  // continua aberto e selecionado; o que muda é só quem detém scrim, trava de
+  // scroll e exclusão mútua.
+  _reconciliarDetalhe() {
+    const d = this.querySelector("#jl-detail");
+    if (!d || d.classList.contains("hidden")) return;
+    const ehFolha = this._detalheEhFolha();
+    const eCorrente = currentSheetEl() === d;
+    // coluna -> folha: entra no mecanismo (e, por exclusão mútua, desbanca a
+    // folha do picker, que é justamente o empilhamento que se quer evitar).
+    if (ehFolha && !eCorrente) this._openSheet();
+    // folha -> coluna: sai do mecanismo. releaseSheet() e não closeSheet()
+    // porque o detalhe continua visível como coluna — mas a trava de scroll do
+    // <html>, que é compartilhada com o HA inteiro, TEM que ser devolvida aqui.
+    else if (!ehFolha && eCorrente) releaseSheet(d);
   }
 
   _buildFilters() {
@@ -322,6 +368,11 @@ class JarvisLogbook extends HTMLElement {
   disconnectedCallback() {
     if (this._unsub) { this._unsub(); this._unsub = null; }
     if (this._rp) { this._rp.destroy(); this._rp = null; }
+    if (this._mqDetalhe) {
+      this._mqDetalhe.removeEventListener("change", this._onRegime);
+      this._mqDetalhe = null;
+      this._onRegime = null;
+    }
     closeSheet();
     clearTimeout(this._liveT);
   }

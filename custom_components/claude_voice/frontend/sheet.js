@@ -34,6 +34,24 @@ export function closeSheet() {
   if (onClose) onClose();
 }
 
+// Solta o estado compartilhado (scrim, trava de scroll do <html>, exclusão
+// mútua) SEM esconder o elemento e SEM disparar onClose. É a rota da mudança de
+// regime: o detalhe do registro deixa de ser desenhado como folha pelo CSS
+// (girar o aparelho cruza os 760px) e precisa continuar visível, como coluna
+// lateral, com a seleção do usuário intacta. Fechar seria perda de trabalho;
+// não fazer nada deixaria a trava de scroll presa no <html>, que é do HA
+// inteiro. Só age se `el` for MESMO a folha corrente.
+export function releaseSheet(el) {
+  if (!atual || atual.el !== el) return;
+  const { scrim } = atual;
+  atual = null;
+  // transform inline do gesto de arrasto não pode sobreviver ao regime coluna
+  el.style.transform = "";
+  el.style.transition = "";
+  if (scrim) { scrim.classList.add("hidden"); scrim.onclick = null; }
+  document.documentElement.classList.remove("jl-sheet-open");
+}
+
 // Arrastar a alça para baixo dispensa a folha. Sem alça, não há gesto.
 // Exportado: consumidores cujo miolo reescreve o innerHTML depois de abrir
 // (ex.: RangePicker ao navegar de mês) trocam a .d-grip por um nó novo, sem os
