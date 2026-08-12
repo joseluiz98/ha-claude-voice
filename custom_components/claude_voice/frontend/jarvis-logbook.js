@@ -1,9 +1,9 @@
 import {
   resolveUserName, fmtDuration, fmtTime, fmtDate, localISODate,
-  applyFilters, computeStats, groupByThread, shouldShowMenu,
+  applyFilters, computeStats, groupByThread, shouldShowMenu, detailLayout,
 } from "./format.js";
 import { CSS } from "./styles.js";
-import { openSheet, closeSheet } from "./sheet.js";
+import { openSheet, closeSheet, currentSheetEl } from "./sheet.js";
 import { RangePicker } from "./range-picker.js";
 
 function shortToolName(name) {
@@ -267,19 +267,40 @@ class JarvisLogbook extends HTMLElement {
     this._selEl = el;
   }
 
+  // O detalhe só é folha abaixo de 760px — acima disso o CSS o desenha como
+  // coluna lateral sticky. Consultar a largura na hora (e não guardar) porque o
+  // usuário redimensiona a janela com o painel aberto.
+  _detalheEhFolha() {
+    return detailLayout({ width: window.innerWidth }) === "sheet";
+  }
+
+  _limparSelecao() {
+    this._selected = null;
+    if (this._selEl) { this._selEl.classList.remove("sel"); this._selEl = null; }
+  }
+
   _openSheet() {
+    // Como coluna, aparecer é tudo o que ele faz: nada de scrim, trava de
+    // scroll, alça ou exclusão mútua. Chamar openSheet() aqui era o que fazia
+    // abrir o seletor de datas fechar o detalhe no desktop.
+    if (!this._detalheEhFolha()) return;
     openSheet({
       el: this.querySelector("#jl-detail"),
       scrim: this.querySelector("#jl-scrim"),
-      onClose: () => {
-        this._selected = null;
-        if (this._selEl) { this._selEl.classList.remove("sel"); this._selEl = null; }
-      },
+      onClose: () => this._limparSelecao(),
     });
   }
 
   _closeSheet() {
-    closeSheet();
+    const d = this.querySelector("#jl-detail");
+    // Só devolve o estado compartilhado se a folha corrente for MESMO o
+    // detalhe: senão um _load() (disparado pelo próprio picker, ao escolher um
+    // range) fecharia a folha do picker por tabela.
+    if (d && currentSheetEl() === d) { closeSheet(); return; }
+    // Regime coluna (ou detalhe nunca aberto como folha): esconder e limpar a
+    // seleção é responsabilidade daqui, já que não há onClose para fazê-lo.
+    if (d) d.classList.add("hidden");
+    this._limparSelecao();
   }
 
   _onLive(rec) {

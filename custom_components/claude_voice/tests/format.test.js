@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   resolveUserName, fmtDuration, localISODate, applyFilters, computeStats, groupByThread,
   presetRange, monthMatrix, shouldShowMenu, pickerLayout, PICKER_BREAKPOINTS,
+  detailLayout, DETAIL_SHEET_MAX_WIDTH,
 } from "../frontend/format.js";
 
 test("localISODate retorna YYYY-MM-DD local e trata inválido", () => {
@@ -87,6 +88,20 @@ test("shouldShowMenu: mesma condição do ha-panel-app do HA", () => {
   assert.equal(shouldShowMenu({ narrow: false, dockedSidebar: "always_hidden" }), true);
   // o HA pode ainda não ter setado as props
   assert.equal(shouldShowMenu({ narrow: undefined, dockedSidebar: undefined }), false);
+});
+
+// I3: o detalhe é folha só onde o CSS o desenha como folha — @media
+// (max-width:760px). Usar os limiares do picker (870/500) aqui era o que fazia
+// abrir o seletor de datas fechar a coluna de detalhe na faixa 761–870px e em
+// qualquer largura com janela baixa (DevTools ancorado embaixo).
+test("detailLayout segue o @media do CSS, e NÃO os limiares do picker", () => {
+  assert.equal(detailLayout({ width: DETAIL_SHEET_MAX_WIDTH }), "sheet");
+  assert.equal(detailLayout({ width: DETAIL_SHEET_MAX_WIDTH + 1 }), "column");
+  // a faixa de sobreposição: picker vira folha, detalhe continua coluna
+  assert.equal(pickerLayout({ width: 800, height: 900 }).container, "sheet");
+  assert.equal(detailLayout({ width: 800 }), "column");
+  // altura não entra na conta do detalhe — o CSS do .detail não tem max-height
+  assert.equal(detailLayout({ width: 1280, height: 300 }), "column");
 });
 
 test("pickerLayout: fronteiras dos dois breakpoints do HA", () => {
