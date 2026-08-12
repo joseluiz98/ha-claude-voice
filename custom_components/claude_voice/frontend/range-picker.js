@@ -29,7 +29,25 @@ export class RangePicker {
     this._onFora = (e) => {
       if (this.aberto && this.modo === "popover" && !this.host.contains(e.target)) this.fechar();
     };
-    this._onMq = () => { if (this.aberto) { this.fechar(); this.abrir(); } };
+    // Re-layout (folha <-> popover) não é abandono: preserva o 1º clique
+    // pendente, que o fechar() zera de propósito nas rotas de dispensa.
+    this._onMq = () => {
+      if (!this.aberto) return;
+      const pendente = this.pick;
+      this.fechar();
+      this.abrir();
+      this.pick = pendente;
+    };
+    // Escape fecha nos dois modos. Sem isto, uma sessão só-teclado (janela baixa
+    // no desktop => modo folha) não tem NENHUMA saída do picker: clicar fora,
+    // arrastar a alça e tocar o scrim são todos ponteiro/toque.
+    this._onEsc = (e) => {
+      if (!this.aberto || e.key !== "Escape") return;
+      e.stopPropagation();
+      this.fechar();
+      const f = this.host.querySelector("#rp-field");
+      if (f) f.focus();
+    };
     this._mqs = [];
   }
 
@@ -44,12 +62,14 @@ export class RangePicker {
       if (this.aberto) this.fechar(); else this.abrir();
     };
     document.addEventListener("click", this._onFora);
+    document.addEventListener("keydown", this._onEsc);
     this._mqs = CONSULTAS.map((q) => window.matchMedia(q));
     this._mqs.forEach((mq) => mq.addEventListener("change", this._onMq));
   }
 
   destroy() {
     document.removeEventListener("click", this._onFora);
+    document.removeEventListener("keydown", this._onEsc);
     this._mqs.forEach((mq) => mq.removeEventListener("change", this._onMq));
     this._mqs = [];
     if (currentSheetEl() === this.sheetEl) closeSheet();
@@ -75,6 +95,9 @@ export class RangePicker {
         scrim: this.scrim,
         onClose: () => {
           this.aberto = false;
+          // Mesmo motivo do fechar(): esta é a rota de dispensa por arrasto e
+          // por toque no scrim, que não passa por fechar().
+          this.pick = null;
           delete this.scrim.dataset.rp;
           document.documentElement.classList.remove("jl-rp-sheet-open");
         },
@@ -86,6 +109,10 @@ export class RangePicker {
 
   fechar() {
     this.aberto = false;
+    // Um 1º clique sem 2º é uma interação ABANDONADA. Sem zerar aqui, o
+    // primeiro toque da próxima abertura se comporta como 2º clique e fecha um
+    // intervalo com uma data que o usuário já desistiu de usar.
+    this.pick = null;
     if (this.modo === "sheet") closeSheet();
     else this.host.querySelector("#rp-pop").classList.add("hidden");
   }
