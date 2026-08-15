@@ -5,7 +5,9 @@
 # SÓ faz GET em /core/api/states/<entity_id>. Não escreve nada.
 #
 #   ha_read.sh <entity_id>          -> imprime só o state
-#   ha_read.sh <entity_id> --full   -> imprime o JSON completo (state+attributes)
+#   ha_read.sh <entity_id> --full   -> imprime o JSON completo (state+attributes),
+#                                       precedido da identidade (device/área/integração)
+#   ha_read.sh <entity_id> --who    -> imprime só a identidade (device/área/integração)
 set -euo pipefail
 
 ENTITY="${1:-}"
@@ -25,9 +27,21 @@ fi
 RESP=$(curl -sf -G "http://supervisor/core/api/states/${ENTITY}" \
   -H "Authorization: Bearer ${TOKEN}")
 
-if [ "$MODE" = "--full" ]; then
-  echo "$RESP"
-else
-  # extrai só o campo state sem depender de jq
-  echo "$RESP" | sed -n 's/.*"state"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1
-fi
+imprimir_identidade() {
+  python3 /data/claude-voice-workdir/ha_registry.py "$ENTITY" 2>/dev/null || true
+}
+
+case "$MODE" in
+  --full)
+    imprimir_identidade
+    echo "$RESP"
+    ;;
+  --who)
+    imprimir_identidade
+    ;;
+  *)
+    # Modo padrão INALTERADO: só o estado, numa linha. O voiceSystemPrompt
+    # depende disso. Não adicionar nada aqui.
+    echo "$RESP" | sed -n 's/.*"state"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1
+    ;;
+esac
