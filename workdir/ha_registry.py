@@ -62,9 +62,11 @@ def resolve(index, entity_id):
         "entity_id": entity_id, "platform": None,
         "device": None, "area": None, "gwid": None,
     }
+    dominio = entity_id.split(".", 1)[0]
     irmas = [x for x in index["by_gwid"].get(rec.get("gwid") or "", []) if x != entity_id]
     preferidas = [x for x in irmas
-                  if index["entities"][x].get("platform") in PREFERIDAS]
+                  if index["entities"][x].get("platform") in PREFERIDAS
+                  and x.split(".", 1)[0] == dominio]
     rec["twins"] = irmas
     rec["preferred_twins"] = preferidas
     rec["is_preferred"] = rec.get("platform") in PREFERIDAS
@@ -76,7 +78,7 @@ def format_suffix(rec):
     """Sufixo humano que os helpers concatenam em cada linha."""
     partes = []
     if rec.get("device"):
-        partes.append(rec["device"])
+        partes.append(rec["device"].strip())
     if rec.get("platform"):
         rotulo = rec["platform"]
         if rec.get("is_fallback"):

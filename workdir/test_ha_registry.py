@@ -19,6 +19,11 @@ def _escrever_fixture(d):
         {"entity_id": "switch.quarto",
          "platform": "localtuya", "device_id": "dev_quarto_local", "area_id": None,
          "name": None, "original_name": "Quarto"},
+        # Gêmea local de OUTRO domínio (não acionável por turn_on/turn_off) —
+        # não pode virar recomendação em preferred_twins.
+        {"entity_id": "select.quarto_modo_luz",
+         "platform": "localtuya", "device_id": "dev_quarto_local", "area_id": None,
+         "name": None, "original_name": "Modo de luz indicadora"},
         # Entidade sem device nenhum.
         {"entity_id": "sensor.orfa",
          "platform": "template", "device_id": None, "area_id": None,
@@ -26,10 +31,10 @@ def _escrever_fixture(d):
     ]}}
     devs = {"data": {"devices": [
         {"id": "dev_quarto", "name": "Interruptor Quarto", "name_by_user": None,
-         "area_id": None, "identifiers": [["tuya", "48670370483fda5170a3"]]},
+         "area_id": None, "identifiers": [["tuya", "aabbccddeeff00112233"]]},
         {"id": "dev_quarto_local", "name": "Interruptor Quarto (localTuya)",
          "name_by_user": None, "area_id": "area_quarto",
-         "identifiers": [["localtuya", "local_48670370483fda5170a3"]]},
+         "identifiers": [["localtuya", "local_aabbccddeeff00112233"]]},
     ]}}
     areas = {"data": {"areas": [{"id": "area_quarto", "name": "Bedroom"}]}}
     for nome, dados in (("core.entity_registry", ents),
@@ -71,6 +76,15 @@ class TestResolve(unittest.TestCase):
         r = ha_registry.resolve(self.idx, "switch.interruptor_cozinha_interruptor_1")
         self.assertEqual(r["preferred_twins"], ["switch.quarto"])
         self.assertTrue(r["is_fallback"])
+
+    def test_preferred_twins_filtra_por_mesmo_dominio(self):
+        """select não é acionável por turn_on/turn_off: não pode virar recomendação,
+        mesmo sendo gêmea local do mesmo aparelho físico (mesmo gwid)."""
+        r = ha_registry.resolve(self.idx, "switch.interruptor_cozinha_interruptor_1")
+        self.assertEqual(r["preferred_twins"], ["switch.quarto"])
+        self.assertNotIn("select.quarto_modo_luz", r["preferred_twins"])
+        # continua listada em twins (twins não é filtrado, só preferred_twins)
+        self.assertIn("select.quarto_modo_luz", r["twins"])
 
     def test_entidade_local_marcada_como_preferida(self):
         r = ha_registry.resolve(self.idx, "switch.quarto")

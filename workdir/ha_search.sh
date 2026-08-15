@@ -37,17 +37,35 @@ process.stdin.on("data", c => d += c).on("end", () => {
   | python3 -c '
 import sys
 sys.path.insert(0, "/data/claude-voice-workdir")
-import ha_registry
 
 linhas = sys.stdin.read().splitlines()
 # So paga o custo de indexar se houver resultado de verdade.
 reais = [l for l in linhas if " | " in l]
-index = ha_registry.build_index() if reais else None
+
+# A anotacao (registry) e um extra. Se ha_registry.py estiver ausente,
+# ilegivel, ou o schema do registry do HA tiver mudado, a busca em si NAO
+# pode morrer -- degrada para as 3 colunas cruas, rc=0. Ver correcao do
+# incidente de 15/08 (revisao final pre-instalacao).
+index = None
+ha_registry = None
+try:
+    import ha_registry as _reg
+    ha_registry = _reg
+    index = ha_registry.build_index() if reais else None
+except Exception:
+    pass
+
 for linha in linhas:
     if " | " not in linha:
         print(linha)
         continue
+    if ha_registry is None:
+        print(linha)
+        continue
     eid = linha.split(" | ", 1)[0].strip()
-    sufixo = ha_registry.format_suffix(ha_registry.resolve(index, eid))
+    try:
+        sufixo = ha_registry.format_suffix(ha_registry.resolve(index, eid))
+    except Exception:
+        sufixo = ""
     print(linha + (" | " + sufixo if sufixo else ""))
 '
