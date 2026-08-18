@@ -81,7 +81,10 @@ def format_suffix(rec):
         partes.append(rec["device"].strip())
     if rec.get("platform"):
         rotulo = rec["platform"]
-        if rec.get("is_fallback"):
+        # O aviso de nuvem depende SÓ da plataforma, nunca de existir gêmea local.
+        # Amarrá-lo a is_fallback fazia entidades de nuvem sem gêmea do mesmo domínio
+        # exibirem apenas "[tuya]", sem sinal nenhum de que dependem da nuvem.
+        if rec.get("platform") in NUVEM:
             rotulo += "/NUVEM"
         partes.append("[" + rotulo + "]")
     if rec.get("area"):

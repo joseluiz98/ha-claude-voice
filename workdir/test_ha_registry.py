@@ -24,6 +24,12 @@ def _escrever_fixture(d):
         {"entity_id": "select.quarto_modo_luz",
          "platform": "localtuya", "device_id": "dev_quarto_local", "area_id": None,
          "name": None, "original_name": "Modo de luz indicadora"},
+        # Entidade de NUVEM cujo device local não tem nada do mesmo domínio
+        # (o local só expõe switch e select). Logo não há gêmea a recomendar e
+        # is_fallback fica False — mas o aviso de nuvem precisa aparecer mesmo assim.
+        {"entity_id": "light.interruptor_cozinha_luz_de_fundo",
+         "platform": "tuya", "device_id": "dev_quarto", "area_id": None,
+         "name": None, "original_name": "Luz de fundo"},
         # Entidade sem device nenhum.
         {"entity_id": "sensor.orfa",
          "platform": "template", "device_id": None, "area_id": None,
@@ -121,6 +127,21 @@ class TestFormatSuffix(unittest.TestCase):
     def test_preferida_recebe_marca(self):
         r = ha_registry.resolve(self.idx, "switch.quarto")
         self.assertIn("PREFERIR", ha_registry.format_suffix(r))
+
+    def test_nuvem_sem_gemea_ainda_avisa_que_e_nuvem(self):
+        """O aviso de nuvem não pode depender de existir alternativa a recomendar.
+
+        Regressão: /NUVEM estava amarrado a is_fallback, então entidade de nuvem
+        sem gêmea do mesmo domínio exibia só "[tuya]" — sem sinal de que depende
+        da nuvem Tuya, que é mais lenta e cai junto com a internet.
+        """
+        r = ha_registry.resolve(self.idx, "light.interruptor_cozinha_luz_de_fundo")
+        self.assertFalse(r["is_fallback"], "sem gêmea do mesmo domínio a recomendar")
+        self.assertEqual(r["preferred_twins"], [])
+        s = ha_registry.format_suffix(r)
+        self.assertIn("[tuya/NUVEM]", s)
+        # ...e sem recomendar nada, porque não há o que recomendar.
+        self.assertNotIn("prefira", s)
 
 
 if __name__ == "__main__":
