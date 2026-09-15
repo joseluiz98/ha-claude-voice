@@ -61,16 +61,18 @@ function loadConfig() {
   if (!cfg.token) cfg.token = crypto.randomBytes(24).toString('hex');
   cfg.port = cfg.port || 8585;
   cfg.defaultAllowedTools = cfg.defaultAllowedTools || [
-    'mcp__homeassistant__GetLiveContext',
-    'mcp__homeassistant__GetDateTime',
-    'mcp__homeassistant__todo_get_items',
-    'mcp__homeassistant__HassTurnOn',
-    'mcp__homeassistant__HassTurnOff',
-    'mcp__homeassistant__HassLightSet',
-    'mcp__homeassistant__HassClimateSetTemperature',
-    'mcp__homeassistant__HassSetVolume',
-    'mcp__homeassistant__HassMediaPause',
-    'mcp__homeassistant__HassMediaUnpause',
+    // HA <= 2026.8 expõe sem prefixo; HA >= 2026.9 prefixa com o domínio
+    // (intent__/homeassistant__/llm__/todo__). Superconjunto: vale nos dois.
+    'mcp__homeassistant__GetLiveContext',   'mcp__homeassistant__homeassistant__GetLiveContext',
+    'mcp__homeassistant__GetDateTime',      'mcp__homeassistant__llm__GetDateTime',
+    'mcp__homeassistant__todo_get_items',   'mcp__homeassistant__todo__todo_get_items',
+    'mcp__homeassistant__HassTurnOn',       'mcp__homeassistant__intent__HassTurnOn',
+    'mcp__homeassistant__HassTurnOff',      'mcp__homeassistant__intent__HassTurnOff',
+    'mcp__homeassistant__HassLightSet',     'mcp__homeassistant__intent__HassLightSet',
+    'mcp__homeassistant__HassClimateSetTemperature', 'mcp__homeassistant__intent__HassClimateSetTemperature',
+    'mcp__homeassistant__HassSetVolume',    'mcp__homeassistant__intent__HassSetVolume',
+    'mcp__homeassistant__HassMediaPause',   'mcp__homeassistant__intent__HassMediaPause',
+    'mcp__homeassistant__HassMediaUnpause', 'mcp__homeassistant__intent__HassMediaUnpause',
     'Read', 'Grep', 'Glob',
     // Helper read-only (GET em /states/) pré-aprovado: leituras pulam o
     // classificador auto e ficam mais rápidas. Escritas seguem no auto.

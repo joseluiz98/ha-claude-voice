@@ -4,6 +4,9 @@
 # - Restart sob demanda via flag file (/share/claude-voice/restart.flag),
 #   que o HA (ou o button.claude_voice_restart) escreve — canal cross-container
 #   pela pasta /share compartilhada.
+# - Reinstala nodejs/npm via apk se o binário sumiu: o add-on PULA os custom
+#   packages quando o DNS está fora no boot e nunca tenta de novo (code=127
+#   em loop; derrubou o CV por 2 dias em 07/09/2026 e 20h em 12/09/2026).
 # Lançado pelo init_commands do Advanced SSH addon (persistência no boot).
 set -u
 
@@ -15,6 +18,19 @@ NODE="$(command -v node || echo /usr/bin/node)"
 PIDFILE="$DIR/wrapper.pid"
 
 log() { echo "[$(date -u +%FT%TZ)] wrapper: $*" >> "$LOG"; }
+
+# garante o node antes de cada subida. Sem rede o apk falha rápido (timeout de
+# 120s como teto) e o laço segue para o backoff normal, tentando de novo.
+ensure_node() {
+  [ -x "$NODE" ] && return 0
+  log "node ausente em $NODE -> apk add nodejs npm"
+  if timeout 120 apk add --no-cache nodejs npm >>"$DIR/wrapper.out" 2>&1 && [ -x "$NODE" ]; then
+    log "node reinstalado: $("$NODE" --version 2>/dev/null)"
+    return 0
+  fi
+  log "apk add falhou (rede fora?); tento de novo no próximo respawn"
+  return 1
+}
 
 # guard anti-duplicidade via pidfile + liveness (não casa com o harness/shells
 # cuja linha de comando apenas contenha o caminho do script).
@@ -41,6 +57,7 @@ log "iniciado (pid $$)"
 backoff=3
 while true; do
   rm -f "$FLAG"
+  ensure_node
   started=$(date +%s)
   log "subindo daemon"
   "$NODE" "$DAEMON" &
