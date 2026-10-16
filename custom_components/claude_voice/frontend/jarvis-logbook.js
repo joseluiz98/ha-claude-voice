@@ -1,16 +1,16 @@
 import {
   resolveUserName, fmtDuration, fmtTime, fmtDate, localISODate,
   applyFilters, computeStats, groupByThread, shouldShowMenu, detailLayout,
-  DETAIL_SHEET_MAX_WIDTH,
+  MOBILE_QUERY, stepSelection, ignoresArrowKeys, escTarget,
 } from "./format.js";
 import { CSS } from "./styles.js";
 import { openSheet, closeSheet, currentSheetEl, releaseSheet } from "./sheet.js";
 import { RangePicker } from "./range-picker.js";
 
-// Derivada do limiar do detalhe (format.js), não repetida como literal — mesmo
+// Derivada do regime celular (format.js), não repetida como literal — mesmo
 // contrato que o range-picker.js tem com PICKER_BREAKPOINTS: se o limiar mudar,
 // o gatilho de reconciliação muda junto.
-const CONSULTA_DETALHE = `(max-width: ${DETAIL_SHEET_MAX_WIDTH}px)`;
+const CONSULTA_DETALHE = MOBILE_QUERY;
 
 function shortToolName(name) {
   return name.replace(/^mcp__[^_]+__/, '');
@@ -28,7 +28,6 @@ class JarvisLogbook extends HTMLElement {
     this._filters = {};
     this._grouped = false;
     this._selected = null;
-    this._visibleCache = [];
     this._narrow = false;
   }
 
@@ -96,7 +95,7 @@ class JarvisLogbook extends HTMLElement {
       this._records = [];
       this._unreadable = 0;
     }
-    this._closeSheet();
+    this._fecharDetalhe();
     this._renderBody();
   }
 
@@ -125,12 +124,11 @@ class JarvisLogbook extends HTMLElement {
           <div class="stats" id="jl-stats"></div>
           <div class="filters" id="jl-filters"></div>
         </div>
-        <div class="scrim hidden" id="jl-scrim"></div>
-        <div class="rp-sheet hidden" id="jl-rp-sheet"></div>
+        <dialog class="rp-sheet" id="jl-rp-sheet"></dialog>
         <div class="wrap">
           <div class="list" id="jl-list"></div>
-          <div class="detail hidden" id="jl-detail"></div>
         </div>
+        <dialog class="detail" id="jl-detail" popover="manual"></dialog>
       </div>`;
     // bubbles + composed é o que faz o evento atravessar o shadow DOM do
     // ha-panel-custom e chegar ao <home-assistant>, que é quem escuta.
@@ -140,6 +138,37 @@ class JarvisLogbook extends HTMLElement {
     this._montarObservadorDeRegime();
     this._buildFilters();
     this._renderBody();
+    this._montarTeclado();
+  }
+
+  // Teclado da gaveta (spec §4.4). Registrado na fase de CAPTURA: o _onEsc do
+  // seletor é de bolha; sem a captura ele fecharia primeiro, o escTarget veria
+  // pickerOpen:false e o mesmo Esc fecharia a gaveta também.
+  _montarTeclado() {
+    if (this._onTecla) return;
+    this._onTecla = (e) => {
+      const d = this.querySelector("#jl-detail");
+      // só a gaveta: na folha, o Esc é o "cancel" do <dialog> (sheet.js)
+      if (!d || !d.matches(":popover-open")) return;
+      if (e.key === "Escape") {
+        const quem = escTarget({ pickerOpen: !!(this._rp && this._rp.aberto), drawerOpen: true });
+        if (quem === "drawer") { e.preventDefault(); this._fecharDetalhe(); }
+        return;
+      }
+      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+      // O painel vive no shadow DOM do ha-panel-custom: document.activeElement
+      // seria o host <home-assistant>. O alvo real do evento é composedPath()[0].
+      const alvo = e.composedPath ? e.composedPath()[0] : e.target;
+      if (ignoresArrowKeys((alvo && alvo.tagName) || "")) return;
+      const r = stepSelection(this._ordem || [], this._selected, e.key === "ArrowDown" ? 1 : -1);
+      if (!r) return;
+      e.preventDefault();
+      const tr = this.querySelector(`#jl-list tr[data-o="${this._ordem.indexOf(r)}"]`);
+      this._markSelected(tr);
+      if (tr) tr.scrollIntoView({ block: "nearest" });
+      this._select(r);
+    };
+    document.addEventListener("keydown", this._onTecla, { capture: true });
   }
 
   // Girar o aparelho cruza os 760px nas duas direções (iPhone: 844px deitado,
@@ -161,24 +190,13 @@ class JarvisLogbook extends HTMLElement {
     this._mqDetalhe.addEventListener("change", this._onRegime);
   }
 
-  // Reconciliar = fazer a participação do detalhe no mecanismo de folha seguir
-  // o CSS, sem fechar nada. Fechar ao cruzar o limiar seria mais simples, mas
-  // apaga trabalho do usuário (a leitura em curso e a seleção) por um motivo
-  // que, para ele, é apenas "virei o telefone". Nas duas direções o detalhe
-  // continua aberto e selecionado; o que muda é só quem detém scrim, trava de
-  // scroll e exclusão mútua.
+  // Girar o aparelho / redimensionar: o mesmo registro continua aberto no outro
+  // modo (folha <-> gaveta). Fechar ao cruzar o limiar apagaria a leitura em
+  // curso e a seleção por um motivo que, para o usuário, é só "virei o telefone".
   _reconciliarDetalhe() {
     const d = this.querySelector("#jl-detail");
-    if (!d || d.classList.contains("hidden")) return;
-    const ehFolha = this._detalheEhFolha();
-    const eCorrente = currentSheetEl() === d;
-    // coluna -> folha: entra no mecanismo (e, por exclusão mútua, desbanca a
-    // folha do picker, que é justamente o empilhamento que se quer evitar).
-    if (ehFolha && !eCorrente) this._openSheet();
-    // folha -> coluna: sai do mecanismo. releaseSheet() e não closeSheet()
-    // porque o detalhe continua visível como coluna — mas a trava de scroll do
-    // <html>, que é compartilhada com o HA inteiro, TEM que ser devolvida aqui.
-    else if (!ehFolha && eCorrente) releaseSheet(d);
+    if (!d || !this._selected || !this._detalheAberto(d)) return;
+    this._mostrarDetalhe();
   }
 
   _buildFilters() {
@@ -198,7 +216,6 @@ class JarvisLogbook extends HTMLElement {
     this._rp = new RangePicker({
       host: this.querySelector("#jl-range"),
       sheetEl: this.querySelector("#jl-rp-sheet"),
-      scrim: this.querySelector("#jl-scrim"),
       from: this._from,
       to: this._to,
       onChange: (from, to) => { this._from = from; this._to = to; this._load(); },
@@ -210,14 +227,16 @@ class JarvisLogbook extends HTMLElement {
     if (!this.querySelector("#jl-list")) return;
     const um = this._um();
     const recs = applyFilters(this._records, this._filters);
-    this._visibleCache = recs;
     const multiDia = this._from !== this._to;
     if (this._grouped) {
       const threads = groupByThread(recs);
+      // Ordem visível (↑/↓ da gaveta): a das linhas como desenhadas.
+      this._ordem = threads.flatMap((t) => t.records);
+      let o = 0;
       this.querySelector("#jl-list").innerHTML = threads.map((t) => {
         const head = t.records[0] || {};
-        const inner = t.records.map((r, i) => `
-          <tr data-tk="${this._esc(t.sessionId)}" data-i="${i}" class="${r.ok ? "" : "err"} ${this._selected === r ? "sel" : ""}">
+        const inner = t.records.map((r) => `
+          <tr data-o="${o++}" tabindex="-1" class="${r.ok ? "" : "err"} ${this._selected === r ? "sel" : ""}">
             <td class="c-hora"><span class="mono" style="padding-left:14px">${fmtTime(r.ts)}</span>${
               multiDia ? `<small class="c-day" style="padding-left:14px">${fmtDate(r.ts)}</small>` : ""
             }</td>
@@ -230,7 +249,7 @@ class JarvisLogbook extends HTMLElement {
           <tbody>${inner}</tbody></table>`;
       }).join("") || `<p class="empty">Sem interações neste dia.</p>`;
       this.querySelectorAll("#jl-list tbody tr").forEach((tr) => {
-        tr.onclick = () => { this._markSelected(tr); const t = groupByThread(this._visibleCache).find((x) => x.sessionId === tr.dataset.tk); if (t) this._select(t.records[Number(tr.dataset.i)]); };
+        tr.onclick = () => { this._markSelected(tr); this._select(this._ordem[Number(tr.dataset.o)]); };
       });
       this._selEl = this.querySelector("#jl-list tr.sel") || null;
       return;
@@ -242,8 +261,9 @@ class JarvisLogbook extends HTMLElement {
       ["top", s.topUser ? resolveUserName(s.topUser, um) : "—"],
     ].map(([k, v]) => `<div class="stat"><b>${this._esc(v)}</b><small>${k}</small></div>`).join("");
 
+    this._ordem = recs;
     const rows = recs.map((r, i) => `
-      <tr data-i="${i}" class="${r.ok ? "" : "err"} ${this._selected === r ? "sel" : ""}">
+      <tr data-o="${i}" tabindex="-1" class="${r.ok ? "" : "err"} ${this._selected === r ? "sel" : ""}">
         <td class="c-data"><span class="mono">${fmtDate(r.ts)}</span></td>
         <td class="c-hora"><span class="mono">${fmtTime(r.ts)}</span>${
           multiDia ? `<small class="c-day">${fmtDate(r.ts)}</small>` : ""
@@ -260,7 +280,7 @@ class JarvisLogbook extends HTMLElement {
       ? `<table><thead><tr><th class="c-data">Data</th><th class="c-hora">Hora</th><th class="c-user">Usuário</th><th class="c-prompt">Prompt</th><th class="c-resp">Resposta</th><th class="c-mode">Modo</th><th class="c-dur">⏱</th><th class="c-status">✓</th></tr></thead><tbody>${rows}</tbody></table>${note}`
       : `<p class="empty">Sem interações neste dia.</p>${note}`;
     this.querySelectorAll("#jl-list tbody tr").forEach((tr) => {
-      tr.onclick = () => { this._markSelected(tr); this._select(this._visibleCache[Number(tr.dataset.i)]); };
+      tr.onclick = () => { this._markSelected(tr); this._select(this._ordem[Number(tr.dataset.o)]); };
     });
     this._selEl = this.querySelector("#jl-list tr.sel") || null;
   }
@@ -270,8 +290,7 @@ class JarvisLogbook extends HTMLElement {
     this._selected = r;
     const um = this._um();
     const d = this.querySelector("#jl-detail");
-    d.classList.remove("hidden");
-    d.innerHTML = `
+    d.innerHTML = `<div class="sheet-body">
       <div class="d-grip"></div>
       <div class="d-head">
         <span class="mono">${fmtTime(r.ts)}</span>
@@ -302,9 +321,9 @@ class JarvisLogbook extends HTMLElement {
         ${r.resumed != null ? `sessão: <b>${r.resumed ? "retomada" : "nova"}</b><br>` : ""}
         sessionId: <b>${this._esc(r.sessionId)}</b><br>
         ts: <b>${this._esc(r.ts)}</b>
-      </div>`;
-    this.querySelector("#jl-close").onclick = () => this._closeSheet();
-    this._openSheet();
+      </div></div>`;
+    this.querySelector("#jl-close").onclick = () => this._fecharDetalhe();
+    this._mostrarDetalhe();
   }
 
   _markSelected(el) {
@@ -313,11 +332,15 @@ class JarvisLogbook extends HTMLElement {
     this._selEl = el;
   }
 
-  // O detalhe só é folha abaixo de 760px — acima disso o CSS o desenha como
-  // coluna lateral sticky. Consultar a largura na hora (e não guardar) porque o
-  // usuário redimensiona a janela com o painel aberto.
+  // Folha no regime celular (largura OU altura baixa), gaveta no desktop.
+  // Consultar na hora (e não guardar) porque o usuário redimensiona a janela
+  // com o painel aberto.
   _detalheEhFolha() {
-    return detailLayout({ width: window.innerWidth }) === "sheet";
+    return detailLayout({ width: window.innerWidth, height: window.innerHeight }) === "sheet";
+  }
+
+  _detalheAberto(d) {
+    return d.open || d.matches(":popover-open");
   }
 
   _limparSelecao() {
@@ -325,28 +348,34 @@ class JarvisLogbook extends HTMLElement {
     if (this._selEl) { this._selEl.classList.remove("sel"); this._selEl = null; }
   }
 
-  _openSheet() {
-    // Como coluna, aparecer é tudo o que ele faz: nada de scrim, trava de
-    // scroll, alça ou exclusão mútua. Chamar openSheet() aqui era o que fazia
-    // abrir o seletor de datas fechar o detalhe no desktop.
-    if (!this._detalheEhFolha()) return;
-    openSheet({
-      el: this.querySelector("#jl-detail"),
-      scrim: this.querySelector("#jl-scrim"),
-      onClose: () => this._limparSelecao(),
-    });
+  // Folha (celular) = <dialog> modal; gaveta (desktop) = popover manual. Os dois
+  // vivem na camada superior: nenhum ancestral nem o scroll mexem na posição.
+  _mostrarDetalhe() {
+    const d = this.querySelector("#jl-detail");
+    if (this._detalheEhFolha()) {
+      if (d.matches(":popover-open")) d.hidePopover();
+      openSheet({ el: d, onClose: () => this._aoFecharDetalhe() });
+    } else {
+      if (currentSheetEl() === d) releaseSheet(d);
+      if (!d.matches(":popover-open")) d.showPopover();
+    }
   }
 
-  _closeSheet() {
+  _fecharDetalhe() {
     const d = this.querySelector("#jl-detail");
-    // Só devolve o estado compartilhado se a folha corrente for MESMO o
-    // detalhe: senão um _load() (disparado pelo próprio picker, ao escolher um
-    // range) fecharia a folha do picker por tabela.
-    if (d && currentSheetEl() === d) { closeSheet(); return; }
-    // Regime coluna (ou detalhe nunca aberto como folha): esconder e limpar a
-    // seleção é responsabilidade daqui, já que não há onClose para fazê-lo.
-    if (d) d.classList.add("hidden");
+    if (!d) return;
+    // Só fecha pelo sheet.js se a folha corrente for MESMO o detalhe: senão um
+    // _load() (disparado pelo próprio picker, ao escolher um range) fecharia a
+    // folha do picker por tabela.
+    if (currentSheetEl() === d) { closeSheet(); return; }   // onClose -> _aoFecharDetalhe
+    if (d.matches(":popover-open")) d.hidePopover();
+    this._aoFecharDetalhe();
+  }
+
+  _aoFecharDetalhe() {
+    const tr = this._selEl;
     this._limparSelecao();
+    if (tr && tr.isConnected) tr.focus({ preventScroll: true });
   }
 
   _onLive(rec) {
@@ -373,6 +402,11 @@ class JarvisLogbook extends HTMLElement {
       this._mqDetalhe = null;
       this._onRegime = null;
     }
+    if (this._onTecla) {
+      document.removeEventListener("keydown", this._onTecla, { capture: true });
+      this._onTecla = null;
+    }
+    this._fecharDetalhe();
     closeSheet();
     clearTimeout(this._liveT);
   }
