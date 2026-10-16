@@ -1,7 +1,7 @@
 import {
   resolveUserName, fmtDuration, fmtTime, fmtDate, localISODate,
   applyFilters, computeStats, groupByThread, shouldShowMenu, detailLayout,
-  MOBILE_QUERY, stepSelection, ignoresArrowKeys, escTarget,
+  MOBILE_QUERY, stepSelection, ignoresArrowKeys, escTarget, stickyScrollMargin, keyTargetsPanel,
 } from "./format.js";
 import { CSS } from "./styles.js";
 import { openSheet, closeSheet, currentSheetEl, releaseSheet } from "./sheet.js";
@@ -150,6 +150,9 @@ class JarvisLogbook extends HTMLElement {
       const d = this.querySelector("#jl-detail");
       // só a gaveta: na folha, o Esc é o "cancel" do <dialog> (sheet.js)
       if (!d || !d.matches(":popover-open")) return;
+      const caminho = e.composedPath ? e.composedPath() : [e.target];
+      // o listener é do document: tecla de diálogo do HA ou da sidebar não é nossa
+      if (e.defaultPrevented || !keyTargetsPanel(caminho, this)) return;
       if (e.key === "Escape") {
         const quem = escTarget({ pickerOpen: !!(this._rp && this._rp.aberto), drawerOpen: true });
         if (quem === "drawer") { e.preventDefault(); this._fecharDetalhe(); }
@@ -158,14 +161,22 @@ class JarvisLogbook extends HTMLElement {
       if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
       // O painel vive no shadow DOM do ha-panel-custom: document.activeElement
       // seria o host <home-assistant>. O alvo real do evento é composedPath()[0].
-      const alvo = e.composedPath ? e.composedPath()[0] : e.target;
-      if (ignoresArrowKeys((alvo && alvo.tagName) || "")) return;
+      // seletor de datas aberto: as setas são dele (rolar a folha), não do registro
+      if (this._rp && this._rp.aberto) return;
+      const alvo = caminho[0];
+      if (ignoresArrowKeys((alvo && alvo.tagName) || "", alvo && alvo.type)) return;
       const r = stepSelection(this._ordem || [], this._selected, e.key === "ArrowDown" ? 1 : -1);
       if (!r) return;
       e.preventDefault();
       const tr = this.querySelector(`#jl-list tr[data-o="${this._ordem.indexOf(r)}"]`);
       this._markSelected(tr);
-      if (tr) tr.scrollIntoView({ block: "nearest" });
+      if (tr) {
+        const tb = this.querySelector(".toolbar");
+        tr.style.scrollMarginTop = stickyScrollMargin({
+          drawer: !this._detalheEhFolha(), toolbarBottom: tb ? tb.getBoundingClientRect().bottom : 0,
+        }) + "px";
+        tr.scrollIntoView({ block: "nearest" });
+      }
       this._select(r);
     };
     document.addEventListener("keydown", this._onTecla, { capture: true });

@@ -144,9 +144,28 @@ export function stepSelection(order, current, delta) {
   return order[i + delta] || null;
 }
 
-// Campos de texto e selects ficam com as setas.
-export function ignoresArrowKeys(tagName) {
-  return ["INPUT", "SELECT", "TEXTAREA"].includes(String(tagName).toUpperCase());
+// Campos de texto e selects ficam com as setas; checkbox, radio e botão (que
+// também são INPUT/BUTTON e ficam com o foco depois do clique) não.
+export function ignoresArrowKeys(tagName, type) {
+  const tag = String(tagName).toUpperCase();
+  if (tag === "INPUT") return !["checkbox", "radio", "button"].includes(String(type || "").toLowerCase());
+  return tag === "SELECT" || tag === "TEXTAREA";
+}
+
+// O teclado da gaveta escuta o document inteiro; só age em teclas do próprio
+// painel (ou com o foco solto no documento), nunca nas de um diálogo do HA nem
+// da sidebar. `path` = e.composedPath().
+export function keyTargetsPanel(path, panel) {
+  if (!path || !path.length) return false;
+  if (path.includes(panel)) return true;
+  return ["BODY", "HTML"].includes(String(path[0].tagName).toUpperCase());
+}
+
+// scroll-margin-top da linha selecionada pelas setas: no desktop o header e a
+// toolbar são sticky e cobrem o topo da área de rolagem, que o scrollIntoView
+// ignora. No celular nada é fixo.
+export function stickyScrollMargin({ drawer, toolbarBottom }) {
+  return drawer ? Math.max(0, Math.ceil(toolbarBottom)) : 0;
 }
 
 // Esc fecha o que abriu por último: o seletor abre por cima da gaveta.

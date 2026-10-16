@@ -4,6 +4,7 @@ import {
   resolveUserName, fmtDuration, localISODate, applyFilters, computeStats, groupByThread,
   presetRange, monthMatrix, shouldShowMenu, pickerLayout, PICKER_BREAKPOINTS,
   detailLayout, MOBILE_QUERY, stepSelection, ignoresArrowKeys, escTarget, popoverPosition,
+  stickyScrollMargin, keyTargetsPanel,
 } from "../frontend/format.js";
 
 test("localISODate retorna YYYY-MM-DD local e trata inválido", () => {
@@ -144,6 +145,27 @@ test("popoverPosition ancora abaixo do campo e não sai da janela", () => {
   assert.deepEqual(popoverPosition({ field: { left: 100, bottom: 120 }, pop, viewport: vp }), { top: 126, left: 100 });
   assert.deepEqual(popoverPosition({ field: { left: 900, bottom: 120 }, pop, viewport: vp }), { top: 126, left: 712 }); // 1280 − 560 − 8
   assert.deepEqual(popoverPosition({ field: { left: -20, bottom: 120 }, pop, viewport: vp }), { top: 126, left: 8 });
+});
+
+test("ignoresArrowKeys: checkbox/radio/botão não seguram as setas (só campos de texto)", () => {
+  for (const ty of ["checkbox", "radio", "button"]) assert.equal(ignoresArrowKeys("INPUT", ty), false, ty);
+  for (const ty of ["text", "search", "", undefined]) assert.equal(ignoresArrowKeys("INPUT", ty), true, String(ty));
+  assert.equal(ignoresArrowKeys("SELECT", "select-one"), true);
+});
+
+test("stickyScrollMargin: no desktop a linha não pode ficar sob o header/toolbar fixos", () => {
+  assert.equal(stickyScrollMargin({ drawer: true, toolbarBottom: 187.4 }), 188);
+  assert.equal(stickyScrollMargin({ drawer: true, toolbarBottom: -5 }), 0);
+  assert.equal(stickyScrollMargin({ drawer: false, toolbarBottom: 187 }), 0); // celular: header não é fixo
+});
+
+test("keyTargetsPanel: teclas de diálogos do HA ou da sidebar não são do painel", () => {
+  const painel = { tagName: "JARVIS-LOGBOOK" };
+  assert.equal(keyTargetsPanel([{ tagName: "TR" }, { tagName: "TABLE" }, painel, { tagName: "BODY" }], painel), true);
+  assert.equal(keyTargetsPanel([{ tagName: "BODY" }, { tagName: "HTML" }], painel), true);   // foco solto no documento
+  assert.equal(keyTargetsPanel([{ tagName: "HA-DIALOG" }, { tagName: "BODY" }], painel), false);
+  assert.equal(keyTargetsPanel([{ tagName: "HA-MD-LIST-ITEM" }, { tagName: "HA-SIDEBAR" }], painel), false);
+  assert.equal(keyTargetsPanel([], painel), false);
 });
 
 test("pickerLayout: fronteiras dos dois breakpoints do HA", () => {
