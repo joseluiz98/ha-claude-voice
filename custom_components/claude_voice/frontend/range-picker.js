@@ -1,4 +1,4 @@
-import { localISODate, monthMatrix, presetRange, pickerLayout, PICKER_BREAKPOINTS } from "./format.js";
+import { localISODate, monthMatrix, presetRange, pickerLayout, PICKER_BREAKPOINTS, popoverPosition } from "./format.js";
 import { openSheet, closeSheet, currentSheetEl, bindSheetDrag } from "./sheet.js";
 
 const PRESETS = [
@@ -15,10 +15,9 @@ const CONSULTAS = [
 ];
 
 export class RangePicker {
-  constructor({ host, sheetEl, scrim, from, to, onChange }) {
+  constructor({ host, sheetEl, from, to, onChange }) {
     this.host = host;
     this.sheetEl = sheetEl;
-    this.scrim = scrim;
     this.from = from;
     this.to = to;
     this.onChange = onChange;
@@ -40,7 +39,7 @@ export class RangePicker {
     };
     // Escape fecha nos dois modos. Sem isto, uma sessão só-teclado (janela baixa
     // no desktop => modo folha) não tem NENHUMA saída do picker: clicar fora,
-    // arrastar a alça e tocar o scrim são todos ponteiro/toque.
+    // arrastar a alça e tocar o backdrop são todos ponteiro/toque.
     this._onEsc = (e) => {
       if (!this.aberto || e.key !== "Escape") return;
       e.stopPropagation();
@@ -48,13 +47,18 @@ export class RangePicker {
       const f = this.host.querySelector("#rp-field");
       if (f) f.focus();
     };
+    // Popover (desktop) é position: fixed na camada superior, sem âncora no
+    // fluxo: acompanha o campo quando a janela ou qualquer scroll se mexe.
+    this._onReposicionar = () => {
+      if (this.aberto && this.modo === "popover") this._posicionar();
+    };
     this._mqs = [];
   }
 
   mount() {
     this.host.innerHTML = `<div class="rp">
       <button type="button" class="rp-field" id="rp-field"></button>
-      <div class="rp-pop hidden" id="rp-pop"></div>
+      <div class="rp-pop" id="rp-pop" popover="manual"></div>
     </div>`;
     this._renderCampo();
     this.host.querySelector("#rp-field").onclick = (e) => {
@@ -63,6 +67,8 @@ export class RangePicker {
     };
     document.addEventListener("click", this._onFora);
     document.addEventListener("keydown", this._onEsc);
+    window.addEventListener("resize", this._onReposicionar);
+    window.addEventListener("scroll", this._onReposicionar, true);
     this._mqs = CONSULTAS.map((q) => window.matchMedia(q));
     this._mqs.forEach((mq) => mq.addEventListener("change", this._onMq));
   }
@@ -70,6 +76,8 @@ export class RangePicker {
   destroy() {
     document.removeEventListener("click", this._onFora);
     document.removeEventListener("keydown", this._onEsc);
+    window.removeEventListener("resize", this._onReposicionar);
+    window.removeEventListener("scroll", this._onReposicionar, true);
     this._mqs.forEach((mq) => mq.removeEventListener("change", this._onMq));
     this._mqs = [];
     if (currentSheetEl() === this.sheetEl) closeSheet();
@@ -83,28 +91,29 @@ export class RangePicker {
     alvo.dataset.presets = layout.presets;
     this._renderConteudo(alvo, this.modo === "sheet");
     if (this.modo === "sheet") {
-      // #jl-scrim é compartilhado com o detalhe do registro, que também abre
-      // via openSheet() — inclusive no desktop, onde ele é coluna lateral, não
-      // folha. O marcador [data-rp] existe só enquanto É o picker quem está
-      // com a folha aberta, para o CSS decidir visibilidade (e a trava de
-      // scroll do <html>) sem reintroduzir o limiar 870/500 duplicado em CSS.
-      this.scrim.dataset.rp = "1";
-      document.documentElement.classList.add("jl-rp-sheet-open");
       openSheet({
         el: this.sheetEl,
-        scrim: this.scrim,
-        onClose: () => {
-          this.aberto = false;
-          // Mesmo motivo do fechar(): esta é a rota de dispensa por arrasto e
-          // por toque no scrim, que não passa por fechar().
-          this.pick = null;
-          delete this.scrim.dataset.rp;
-          document.documentElement.classList.remove("jl-rp-sheet-open");
-        },
+        // rota de dispensa por arrasto, backdrop ou Esc, que não passa por fechar()
+        onClose: () => { this.aberto = false; this.pick = null; },
       });
     } else {
-      alvo.classList.remove("hidden");
+      // Camada superior: aberto depois da gaveta do detalhe, fica por cima dela.
+      if (!alvo.matches(":popover-open")) alvo.showPopover();
+      this._posicionar();
     }
+  }
+
+  _posicionar() {
+    const pop = this.host.querySelector("#rp-pop");
+    const f = this.host.querySelector("#rp-field").getBoundingClientRect();
+    const r = pop.getBoundingClientRect();
+    const { top, left } = popoverPosition({
+      field: { left: f.left, bottom: f.bottom },
+      pop: { width: r.width, height: r.height },
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+    });
+    pop.style.top = `${top}px`;
+    pop.style.left = `${left}px`;
   }
 
   fechar() {
@@ -113,8 +122,12 @@ export class RangePicker {
     // primeiro toque da próxima abertura se comporta como 2º clique e fecha um
     // intervalo com uma data que o usuário já desistiu de usar.
     this.pick = null;
-    if (this.modo === "sheet") closeSheet();
-    else this.host.querySelector("#rp-pop").classList.add("hidden");
+    if (this.modo === "sheet") {
+      if (currentSheetEl() === this.sheetEl) closeSheet();
+    } else {
+      const pop = this.host.querySelector("#rp-pop");
+      if (pop && pop.matches(":popover-open")) pop.hidePopover();
+    }
   }
 
   _renderCampo() {
@@ -128,9 +141,7 @@ export class RangePicker {
       .toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
     const lo = this.from <= this.to ? this.from : this.to;
     const hi = this.from <= this.to ? this.to : this.from;
-    alvo.innerHTML = `
-      ${comAlca ? '<div class="d-grip"></div>' : ""}
-      <div class="rp-inner">
+    const miolo = `<div class="rp-inner">
         <div class="rp-presets">${PRESETS.map(([k, l]) =>
           `<button type="button" data-k="${k}">${l}</button>`).join("")}</div>
         <div class="rp-cal">
@@ -151,6 +162,9 @@ export class RangePicker {
           </div>
         </div>
       </div>`;
+    // Na folha o conteúdo vive num único .sheet-body (contrato do sheet.js: clique
+    // com alvo no próprio <dialog> = backdrop). No popover fica solto.
+    alvo.innerHTML = comAlca ? `<div class="sheet-body"><div class="d-grip"></div>${miolo}</div>` : miolo;
     this._ligar(alvo);
     // _renderConteudo() reescreve alvo.innerHTML por inteiro — inclusive numa
     // navegação de mês ou no 1º clique de um novo range — o que troca o nó
