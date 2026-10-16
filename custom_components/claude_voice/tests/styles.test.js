@@ -83,10 +83,15 @@ test("gaveta do desktop: dialog modal à direita, do topo ao rodapé, com fundo 
   assert.ok(!CSS.includes(".detail:popover-open"), "a gaveta não é mais popover");
 });
 
-test("respeita o notch/safe area do iPhone (deitado e no rodapé das folhas)", () => {
-  assert.match(CSS, /\.jl\s*\{[^}]*padding-left:\s*env\(safe-area-inset-left\)/);
-  assert.match(CSS, /\.jl\s*\{[^}]*padding-right:\s*env\(safe-area-inset-right\)/);
-  assert.match(CSS, /\.jl \.sheet-body\s*\{[^}]*env\(safe-area-inset-bottom\)/);
+test("notch: o HA (>= 2026.8) já recua o painel; o .jl não soma outro recuo", () => {
+  // ha-panel-custom põe padding com --safe-area-content-inset-*; somar env() aqui dobrava o deslize
+  assert.ok(!/\.jl\s*\{[^}]*safe-area/.test(CSS));
+});
+
+test("notch nas folhas (top layer, fora do padding do HA): variáveis do HA, que o app iOS atualiza ao girar", () => {
+  assert.match(CSS, /\.jl \.sheet-body\s*\{[^}]*var\(--safe-area-inset-left, env\(safe-area-inset-left\)\)/);
+  assert.match(CSS, /\.jl \.sheet-body\s*\{[^}]*var\(--safe-area-inset-right, env\(safe-area-inset-right\)\)/);
+  assert.match(CSS, /\.jl \.sheet-body\s*\{[^}]*var\(--safe-area-inset-bottom, env\(safe-area-inset-bottom\)\)/);
 });
 
 test("dialog/popover fechado continua escondido mesmo com display do autor", () => {

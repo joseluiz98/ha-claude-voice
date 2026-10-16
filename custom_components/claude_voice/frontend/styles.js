@@ -28,9 +28,6 @@ export const CSS = `
           color: var(--jl-text);
           font-size: var(--jl-fs);
           animation: jl-fade .32s ease both;
-          /* notch do iPhone deitado: viewport-fit=cover no HA, então quem
-             respeita a área segura é a página (0 onde não há notch) */
-          padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right);
         }
         @keyframes jl-fade { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
         /* Içado para fora de qualquer @media: keyframes só produzem efeito onde
@@ -283,7 +280,15 @@ export const CSS = `
         .jl dialog:not([open]) { display: none; }
         .jl .sheet-body {
           box-sizing: border-box; height: 100%; overflow: auto; overscroll-behavior: contain;
-          padding: 8px max(18px, env(safe-area-inset-right)) calc(20px + env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
+          /* Notch: o painel em si é recuado pelo HA (ha-panel-custom, desde a
+             2026.8, com --safe-area-content-inset-*). As folhas vivem no top
+             layer, fora desse recuo: usam as variáveis do HA, que o app iOS
+             preenche (--app-safe-area-inset-*) e atualiza ao girar; env() puro
+             ficava velho depois da rotação. */
+          padding: 8px
+            max(18px, var(--safe-area-inset-right, env(safe-area-inset-right)))
+            calc(20px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom)))
+            max(18px, var(--safe-area-inset-left, env(safe-area-inset-left)));
         }
         /* alça: 4px visíveis, mas o arrasto vale para o topo inteiro da folha
            (sheet.js), então ela é só a pista visual */
