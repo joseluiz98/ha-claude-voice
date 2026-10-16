@@ -43,8 +43,23 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     }
 
     frontend_dir = Path(__file__).parent / "frontend"
+    # A versão vai no CAMINHO, não em query string. O módulo de entrada importa
+    # ./format.js, ./styles.js, ./sheet.js e ./range-picker.js por caminho
+    # relativo, e caminho relativo NÃO herda a query do importador: com
+    # `?v=VERSION` só a entrada era cache-busted, e uma cópia velha de
+    # format.js (mesma URL de sempre, servida sem Cache-Control, com frescor
+    # heurístico pelo Last-Modified) quebrava a linkagem do módulo ES — painel
+    # em branco, com erro só no console do navegador. Sob um segmento de
+    # versão, os quatro imports herdam a URL nova de graça.
+    # Continua embaixo de STATIC_URL de propósito: a Cache Rule de bypass do
+    # Cloudflare cobre `/api/claude_voice/static/*` e precisa seguir cobrindo.
+    versioned_url = f"{STATIC_URL}/{VERSION}"
+    # cache_headers=True agora é seguro (e desejável): cada VERSION é uma URL
+    # nova, então o conteúdo de cada URL é imutável por construção — acabou o
+    # cenário "mesma URL, conteúdo diferente" que obrigava a servir sem
+    # Cache-Control.
     await hass.http.async_register_static_paths(
-        [StaticPathConfig(STATIC_URL, str(frontend_dir), False)]
+        [StaticPathConfig(versioned_url, str(frontend_dir), True)]
     )
 
     async_register_ws(hass)
@@ -53,7 +68,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         hass,
         frontend_url_path=PANEL_URL_PATH,
         webcomponent_name=PANEL_WEBCOMPONENT,
-        module_url=f"{STATIC_URL}/jarvis-logbook.js?v={VERSION}",
+        module_url=f"{versioned_url}/jarvis-logbook.js",
         sidebar_title="Jarvis Logbook",
         sidebar_icon="mdi:robot-happy",
         require_admin=True,
