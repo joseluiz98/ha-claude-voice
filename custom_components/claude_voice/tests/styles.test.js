@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CSS } from "../frontend/styles.js";
+import { MOBILE_QUERY } from "../frontend/format.js";
 
 test("CSS é uma string e não carrega as tags <style>", () => {
   assert.equal(typeof CSS, "string");
@@ -67,4 +68,34 @@ test("CSS respeita prefers-reduced-motion", () => {
     CSS.includes("prefers-reduced-motion"),
     "o painel tem uma animação infinita (jl-pulse) e precisa da guarda"
   );
+});
+
+test("folhas do celular: dialog modal a 90% da altura visível, presas ao rodapé", () => {
+  assert.match(CSS, /\.jl \.detail:modal, \.jl \.rp-sheet:modal\s*\{[^}]*height:\s*90dvh/);
+  assert.ok(CSS.includes("::backdrop"), "o fundo escuro vem do ::backdrop");
+});
+
+test("gaveta do desktop: popover aberto à direita, do topo ao rodapé, sem fundo", () => {
+  assert.match(CSS, /\.jl \.detail:popover-open\s*\{[^}]*width:\s*min\(480px,\s*40vw\)/);
+  assert.match(CSS, /\.jl \.detail:popover-open\s*\{[^}]*height:\s*100dvh/);
+});
+
+test("dialog/popover fechado continua escondido mesmo com display do autor", () => {
+  assert.match(CSS, /\.jl dialog:not\(\[open\]\):not\(:popover-open\)[^{]*\{[^}]*display:\s*none/);
+  assert.match(CSS, /\.jl \.rp-pop:not\(:popover-open\)\s*\{[^}]*display:\s*none/);
+});
+
+test("header e toolbar deixam de ser fixos no regime celular", () => {
+  const q = MOBILE_QUERY.replace(/[()]/g, "\\$&");
+  assert.match(CSS, new RegExp(`@media ${q}\\s*\\{[\\s\\S]*?\\.jl \\.jl-hdr, \\.jl \\.toolbar\\s*\\{[^}]*position:\\s*static`));
+});
+
+test("o scrim antigo e a coluna sticky do detalhe saíram", () => {
+  assert.ok(!CSS.includes(".scrim"), "o #jl-scrim não existe mais");
+  assert.ok(!CSS.includes("jl-rp-sheet-open"), "a trava de scroll é uma só (jl-sheet-open)");
+  assert.ok(!/\.jl \.detail\s*\{[^}]*position:\s*sticky/.test(CSS), "o detalhe não é mais coluna sticky");
+});
+
+test("nenhum overflow-x em .jl (armadilha registrada)", () => {
+  assert.ok(!/\.jl\s*\{[^}]*overflow-x/.test(CSS));
 });

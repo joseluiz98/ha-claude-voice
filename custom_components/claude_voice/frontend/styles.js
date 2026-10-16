@@ -1,3 +1,5 @@
+import { MOBILE_QUERY } from "./format.js";
+
 // CSS do painel Jarvis Logbook.
 // Servido como JS de propósito, e não como .css: um .css seria um estático a
 // mais atrás do Cloudflare e, quando ficasse velho, não quebraria com erro —
@@ -5,15 +7,6 @@
 // caminho estático (STATIC_URL/VERSION/…), igual aos demais imports relativos.
 export const CSS = `
         jarvis-logbook { display:block; }
-        @media (max-width: 760px) {
-          :root.jl-sheet-open, html.jl-sheet-open body { overflow:hidden !important; }
-        }
-        /* Trava de scroll da folha do date picker. Sem media query de propósito:
-           quem decide "isto é folha" é o pickerLayout() (format.js), não o CSS —
-           a classe só existe no <html> quando o RangePicker escolheu modo folha,
-           então duplicar o limiar aqui reintroduziria exatamente o vão que a I1
-           corrigiu (760px do .detail vs 870/500 do picker). */
-        :root.jl-rp-sheet-open, html.jl-rp-sheet-open body { overflow:hidden !important; }
         .jl {
           --jl-mono: ui-monospace, "SF Mono", SFMono-Regular, "JetBrains Mono", "Roboto Mono", Menlo, Consolas, monospace;
           --jl-accent: var(--primary-color, #2f6df6);
@@ -38,9 +31,8 @@ export const CSS = `
         }
         @keyframes jl-fade { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
         /* Içado para fora de qualquer @media: keyframes só produzem efeito onde
-           são referenciados (.detail em mobile, .rp-sheet do picker em telas
-           mais largas que 760px) — aninhado numa media query, ficaria inerte
-           fora dela. */
+           são referenciados (as folhas :modal do detalhe e do seletor) —
+           aninhado numa media query, ficaria inerte fora dela. */
         @keyframes jl-sheet { from { transform:translateY(100%); } to { transform:none; } }
 
         .jl .jl-hdr {
@@ -160,16 +152,7 @@ export const CSS = `
         .jl .dot.ok  { background:var(--jl-ok);  box-shadow:0 0 0 3px color-mix(in srgb, var(--jl-ok) 18%, transparent); }
         .jl .dot.err { background:var(--jl-err); box-shadow:0 0 0 3px color-mix(in srgb, var(--jl-err) 18%, transparent); }
 
-        .jl .detail {
-          width:340px; flex-shrink:0; align-self:flex-start;
-          position:sticky; top: calc(var(--header-height, 56px) + 52px);
-          max-height: calc(100vh - var(--header-height, 56px) - 76px); overflow:auto;
-          border:1px solid var(--jl-border); border-radius:15px; background:var(--jl-surface);
-          padding:16px 18px 20px; box-shadow:0 10px 34px -18px rgba(0,0,0,.4);
-          animation:jl-slide .2s ease both;
-        }
         @keyframes jl-slide { from { opacity:0; transform:translateX(10px); } to { opacity:1; transform:none; } }
-        .jl .detail.hidden { display:none; }
         .jl .detail .d-head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:var(--jl-fs); padding-bottom:12px; margin-bottom:6px; border-bottom:1px solid var(--jl-border); }
         .jl .detail #jl-close {
           margin-left:auto; cursor:pointer; font-size:var(--jl-fs-lg); line-height:1; width:26px; height:26px; border-radius:7px;
@@ -180,20 +163,6 @@ export const CSS = `
         .jl .detail .d-body { font-size:var(--jl-fs); line-height:1.5; white-space:pre-wrap; word-break:break-word; }
         .jl .detail .meta { font-family:var(--jl-mono); font-size:var(--jl-fs-sm); line-height:1.85; color:var(--jl-dim); word-break:break-all; }
         .jl .detail .meta b { color:var(--jl-text); font-weight:600; }
-        .jl .scrim {
-          display: none;
-          position: fixed; inset: 0; z-index: 19; background: rgba(0,0,0,.5);
-          -webkit-backdrop-filter: blur(1px); backdrop-filter: blur(1px);
-          touch-action: none; animation: jl-fade .18s ease both;
-        }
-        /* Mesmo raciocínio da trava de scroll: [data-rp] é setado pelo
-           RangePicker só quando pickerLayout() escolheu modo folha — sem media
-           query aqui, para não duplicar o limiar 870/500 e reabrir o vão da I1.
-           O #jl-detail nunca marca data-rp, então continua sem scrim fora do
-           bloco de 760px logo abaixo, exatamente como hoje. */
-        .jl .scrim[data-rp]:not(.hidden) { display: block; }
-        .jl .detail .d-grip { display:none; }
-
         .jl .rp { position:relative; display:inline-block; max-width:100%; }
         /* Bloco ÚNICO do campo de data — os dois blocos que existiam (um só com o
            teto/ellipsis, outro com a caixa) viviam a 88 linhas de distância e
@@ -220,11 +189,10 @@ export const CSS = `
           border-color:var(--jl-accent);
         }
         .jl .rp-pop {
-          position:absolute; z-index:30; top:calc(100% + 6px); left:0; display:flex; gap:0;
+          display:flex; gap:0;
           border:1px solid var(--jl-border); border-radius:14px; background:var(--jl-surface);
           box-shadow:0 12px 40px -12px rgba(0,0,0,.45); overflow:hidden;
         }
-        .jl .rp-pop.hidden { display:none; }
         .jl .rp-presets { display:flex; flex-direction:column; padding:8px; gap:2px; border-right:1px solid var(--jl-border); min-width:130px; }
         .jl .rp-presets button {
           flex: 0 0 auto; white-space: nowrap;
@@ -251,26 +219,6 @@ export const CSS = `
         .jl .rp-grid .cell.in { background:color-mix(in srgb, var(--jl-accent) 16%, transparent); }
         .jl .rp-grid .cell.edge { background:var(--jl-accent); color:#fff; }
 
-        /* O contêiner da folha vive fora da .toolbar de propósito: backdrop-filter
-           cria bloco de contenção para descendentes fixed. */
-        .jl .rp-sheet {
-          position: fixed; inset: auto 0 0 0; z-index: 21;
-          max-height: 88vh; overflow: auto; overscroll-behavior: contain;
-          padding: 8px 12px 20px; background: var(--jl-surface);
-          border-radius: 18px 18px 0 0; box-shadow: 0 -10px 40px -10px rgba(0,0,0,.5);
-          /* backwards, não both: "both" persiste o frame "to" (transform:none)
-             depois dos 220ms, e esse valor vindo de animação vence o
-             transform inline não-!important que o arrasto (sheet.js) escreve
-             durante o gesto — a folha para de acompanhar o dedo. backwards só
-             aplica o frame "from" antes de começar (o que faz subir de
-             baixo) e não deixa nada preso depois. */
-          animation: jl-sheet .22s ease backwards;
-        }
-        .jl .rp-sheet.hidden { display: none; }
-        .jl .rp-sheet .d-grip {
-          display: block; width: 40px; height: 4px; margin: 4px auto 12px;
-          border-radius: 999px; background: var(--jl-border); touch-action: none;
-        }
         .jl .rp-inner { display: flex; }
 
         /* presets como faixa de chips rolável */
@@ -309,33 +257,67 @@ export const CSS = `
              overflow-y computar como auto, o elemento vira contêiner de rolagem
              e o .toolbar sticky passa a grudar nele em vez da viewport. */
           .jl .list { overflow-x: hidden; }
-          .jl .detail {
-            position:fixed; inset:auto 0 0 0; width:auto; top:auto; max-height:82vh;
-            border-radius:18px 18px 0 0; box-shadow:0 -10px 40px -10px rgba(0,0,0,.5); z-index:20;
-            /* backwards, não both — mesmo raciocínio do .jl .rp-sheet acima:
-               "both" prendia transform:none depois da animação e o arrasto da
-               alça nunca acompanhava o dedo aqui embaixo de 760px. Defeito
-               pré-existente (não introduzido pela correção do I1: aqui a
-               animação sempre esteve dentro deste media query), corrigido
-               junto por ser a mesma declaração e o mesmo mecanismo. */
-            animation:jl-sheet .22s ease backwards;
-          }
-          /* Propriedades visuais completas já vivem na regra base de .jl .scrim;
-             aqui só alterna display para quem abriu o detalhe como folha. */
-          .jl .scrim:not(.hidden) { display:block; }
-          .jl .detail { overscroll-behavior:contain; }
-          .jl .detail .d-grip {
-            display:block; width:40px; height:4px; margin:-4px auto 10px; border-radius:999px;
-            background:var(--jl-border); touch-action:none;
-          }
-          /* 26px é o alvo atual, e é o botão de fechar a folha no celular */
-          .jl .detail #jl-close { width: 40px; height: 40px; font-size: var(--jl-fs-xl); }
         }
         @media (max-width: 480px) {
           /* 3 colunas em 393pt deixam 123px por coluna ≈ 14 caracteres. Com a
              Resposta fora, o Prompt fica com ~280px ≈ 31 caracteres, e a
              resposta continua a um toque no detalhe. */
           .jl .c-resp { display: none; }
+        }
+        /* Spec 2026-10-16: folhas e gaveta vivem na camada superior (<dialog>
+           modal / popover manual). Lá nenhum ancestral com transform ou
+           backdrop-filter prende o position:fixed, e o scroll da página não
+           mexe na posição — era o que escondia a folha com listas longas. */
+        :root.jl-sheet-open, html.jl-sheet-open body { overflow: hidden !important; }
+
+        .jl dialog.detail, .jl dialog.rp-sheet {
+          margin: 0; padding: 0; border: none; overflow: hidden;
+          max-width: 100%; max-height: 100%;
+          color: var(--jl-text); background: var(--jl-surface);
+        }
+        /* o display do autor venceria o display:none do user agent */
+        .jl dialog:not([open]):not(:popover-open) { display: none; }
+        .jl .sheet-body {
+          box-sizing: border-box; height: 100%; overflow: auto; overscroll-behavior: contain;
+          padding: 8px 18px 20px;
+        }
+        .jl .d-grip {
+          display: block; width: 40px; height: 4px; margin: 4px auto 12px;
+          border-radius: 999px; background: var(--jl-border); touch-action: none;
+        }
+
+        /* Folha (celular): sempre 90% da altura visível, presa ao rodapé. */
+        .jl .detail:modal, .jl .rp-sheet:modal {
+          position: fixed; inset: auto 0 0 0; width: 100%;
+          height: 90vh; height: 90dvh;
+          border-radius: 18px 18px 0 0; box-shadow: 0 -10px 40px -10px rgba(0,0,0,.5);
+          /* backwards, não both: "both" prende transform:none depois da
+             animação e o arrasto da alça (sheet.js) deixa de acompanhar o dedo. */
+          animation: jl-sheet .22s ease backwards;
+        }
+        .jl .detail::backdrop, .jl .rp-sheet::backdrop { background: rgba(0,0,0,.5); }
+
+        /* Gaveta (desktop): do topo ao rodapé, à direita, sem fundo escuro; a
+           tabela atrás continua com a largura toda e clicável. O display:block
+           explícito não depende de o user agent liberar <dialog popover>. */
+        .jl .detail:popover-open {
+          display: block;
+          position: fixed; inset: 0 0 0 auto; width: min(480px, 40vw);
+          height: 100vh; height: 100dvh;
+          border-left: 1px solid var(--jl-border); box-shadow: -14px 0 40px -18px rgba(0,0,0,.45);
+          animation: jl-slide .2s ease both;
+        }
+        .jl .detail:popover-open .d-grip { display: none; }
+
+        /* Popover do seletor (desktop): posição vem do JS (popoverPosition). */
+        .jl .rp-pop:popover-open {
+          position: fixed; inset: auto; margin: 0; padding: 0; color: var(--jl-text);
+        }
+        .jl .rp-pop:not(:popover-open) { display: none; }
+
+        @media ${MOBILE_QUERY} {
+          .jl .jl-hdr, .jl .toolbar { position: static; }
+          .jl .detail #jl-close { width: 40px; height: 40px; font-size: var(--jl-fs-xl); }
         }
         .jl .detail .d-trace {
           display: flex; flex-direction: column; gap: 0;
