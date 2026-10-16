@@ -1,54 +1,67 @@
-// Bottom sheet compartilhado pelo detalhe do registro e pelo date picker.
+// Bottom sheet compartilhado pelo detalhe do registro (celular) e pelo date picker.
 // O estado de "folha aberta" vive aqui, e não espalhado entre os consumidores:
-// é o que garante a regra de nunca haver duas folhas nem dois scrims.
+// é o que garante a regra de nunca haver duas folhas abertas.
+// Cada folha é um <dialog> aberto com showModal(): vai para a camada superior
+// do navegador (top layer), onde nenhum ancestral nem o scroll da página mexe
+// na posição, e o fundo escuro é o ::backdrop do próprio dialog.
 
 let atual = null;
+// Ouvintes de cancel/backdrop ligados uma vez por <dialog>: reabrir não pode duplicá-los.
+const ligados = new WeakSet();
 
 export function currentSheetEl() {
   return atual ? atual.el : null;
 }
 
-export function openSheet({ el, scrim, onClose }) {
+function ligar(el) {
+  if (ligados.has(el)) return;
+  ligados.add(el);
+  // Esc / "voltar" do Android: o <dialog> fecharia sozinho e deixaria a trava de
+  // scroll e a exclusão mútua presas. Todo fechamento passa por closeSheet().
+  el.addEventListener("cancel", (e) => {
+    e.preventDefault();
+    if (atual && atual.el === el) closeSheet();
+  });
+  // O conteúdo vive num único .sheet-body que ocupa a folha inteira: um clique
+  // cujo alvo é o próprio <dialog> só pode ter vindo do ::backdrop.
+  el.addEventListener("click", (e) => {
+    if (e.target === el && atual && atual.el === el) closeSheet();
+  });
+}
+
+export function openSheet({ el, onClose }) {
   if (atual && atual.el !== el) closeSheet();
-  el.classList.remove("hidden");
+  ligar(el);
   el.style.transform = "";
-  if (scrim) {
-    scrim.classList.remove("hidden");
-    scrim.onclick = () => closeSheet();
-  }
+  if (!el.open) el.showModal();
   document.documentElement.classList.add("jl-sheet-open");
-  atual = { el, scrim, onClose: onClose || null };
+  atual = { el, onClose: onClose || null };
   bindSheetDrag(el);
 }
 
 export function closeSheet() {
   if (!atual) return;
-  const { el, scrim, onClose } = atual;
+  const { el, onClose } = atual;
   // zerado ANTES do callback: o consumidor costuma chamar closeSheet() de volta
   // ao limpar seu próprio estado, e a reentrada precisa sair aqui.
   atual = null;
-  el.classList.add("hidden");
   el.style.transform = "";
-  if (scrim) scrim.classList.add("hidden");
+  if (el.open) el.close();
   document.documentElement.classList.remove("jl-sheet-open");
   if (onClose) onClose();
 }
 
-// Solta o estado compartilhado (scrim, trava de scroll do <html>, exclusão
-// mútua) SEM esconder o elemento e SEM disparar onClose. É a rota da mudança de
-// regime: o detalhe do registro deixa de ser desenhado como folha pelo CSS
-// (girar o aparelho cruza os 760px) e precisa continuar visível, como coluna
-// lateral, com a seleção do usuário intacta. Fechar seria perda de trabalho;
-// não fazer nada deixaria a trava de scroll presa no <html>, que é do HA
-// inteiro. Só age se `el` for MESMO a folha corrente.
+// Mudança de regime (folha -> gaveta): solta o estado compartilhado e fecha o
+// modal SEM disparar onClose — o detalhe reabre como gaveta com a seleção
+// intacta. Fechar de verdade seria perda de trabalho; não soltar deixaria a
+// trava de scroll presa no <html>, que é do HA inteiro. Só age se `el` for
+// MESMO a folha corrente.
 export function releaseSheet(el) {
   if (!atual || atual.el !== el) return;
-  const { scrim } = atual;
   atual = null;
-  // transform inline do gesto de arrasto não pode sobreviver ao regime coluna
   el.style.transform = "";
   el.style.transition = "";
-  if (scrim) { scrim.classList.add("hidden"); scrim.onclick = null; }
+  if (el.open) el.close();
   document.documentElement.classList.remove("jl-sheet-open");
 }
 
