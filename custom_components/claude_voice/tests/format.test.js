@@ -3,19 +3,13 @@ import { test } from "node:test";
 import {
   resolveUserName, fmtDuration, localISODate, applyFilters, computeStats, groupByThread,
   presetRange, monthMatrix, shouldShowMenu, pickerLayout, PICKER_BREAKPOINTS,
-  detailLayout, DETAIL_SHEET_MAX_WIDTH,
+  detailLayout, MOBILE_QUERY, stepSelection, ignoresArrowKeys, escTarget, popoverPosition,
 } from "../frontend/format.js";
 
 test("localISODate retorna YYYY-MM-DD local e trata inválido", () => {
   // meio-dia UTC: a data local coincide com a UTC em qualquer fuso realista
   assert.equal(localISODate("2026-06-24T12:00:00Z"), "2026-06-24");
   assert.equal(localISODate("lixo"), "");
-});
-
-test("resolveUserName mapeia e faz fallback", () => {
-  assert.equal(resolveUserName("abc", { abc: "José" }), "José");
-  assert.equal(resolveUserName("xyz123456", {}), "Desconhecido (…123456)");
-  assert.equal(resolveUserName("", {}), "Desconhecido");
 });
 
 test("fmtDuration formata pt-BR e trata nulo", () => {
@@ -90,18 +84,66 @@ test("shouldShowMenu: mesma condição do ha-panel-app do HA", () => {
   assert.equal(shouldShowMenu({ narrow: undefined, dockedSidebar: undefined }), false);
 });
 
-// I3: o detalhe é folha só onde o CSS o desenha como folha — @media
-// (max-width:760px). Usar os limiares do picker (870/500) aqui era o que fazia
-// abrir o seletor de datas fechar a coluna de detalhe na faixa 761–870px e em
-// qualquer largura com janela baixa (DevTools ancorado embaixo).
-test("detailLayout segue o @media do CSS, e NÃO os limiares do picker", () => {
-  assert.equal(detailLayout({ width: DETAIL_SHEET_MAX_WIDTH }), "sheet");
-  assert.equal(detailLayout({ width: DETAIL_SHEET_MAX_WIDTH + 1 }), "column");
-  // a faixa de sobreposição: picker vira folha, detalhe continua coluna
+test("regime celular por largura OU altura (spec §4.1)", () => {
+  assert.equal(MOBILE_QUERY, "(max-width: 760px), (max-height: 500px)");
+  assert.equal(detailLayout({ width: 760, height: 900 }), "sheet");
+  assert.equal(detailLayout({ width: 761, height: 900 }), "drawer");
+  assert.equal(detailLayout({ width: 852, height: 393 }), "sheet");   // iPhone deitado
+  assert.equal(detailLayout({ width: 1280, height: 500 }), "sheet");
+  assert.equal(detailLayout({ width: 1280, height: 501 }), "drawer");
+});
+
+test("o seletor de datas continua com os limiares próprios (faixa 761–870)", () => {
+  assert.equal(detailLayout({ width: 800, height: 900 }), "drawer");
   assert.equal(pickerLayout({ width: 800, height: 900 }).container, "sheet");
-  assert.equal(detailLayout({ width: 800 }), "column");
-  // altura não entra na conta do detalhe — o CSS do .detail não tem max-height
-  assert.equal(detailLayout({ width: 1280, height: 300 }), "column");
+});
+
+test("resolveUserName: mapa, F.R.I.D.A.Y., automações do CV e desconhecidos (spec §4.5)", () => {
+  const um = { "amzn1.ask.account.XYZ": "José", "friday-satelite-sat-8295e1": "Friday · satélite Escritório" };
+  assert.equal(resolveUserName("amzn1.ask.account.XYZ", um), "José");
+  assert.equal(resolveUserName("friday-satelite-sat-8295e1", um), "Friday · satélite Escritório");
+  assert.equal(resolveUserName("friday-pagina", um), "Friday · página");
+  assert.equal(resolveUserName("friday-satelite-sat-desconhecido", um), "Friday · satélite sat-desconhecido");
+  assert.equal(resolveUserName("homelab-operator", um), "CV · homelab-operator");
+  assert.equal(resolveUserName("manual-refire-17837767", um), "CV · manual-refire-17837767");
+  assert.equal(resolveUserName("amzn1.ask.account.OUTRA123456", um), "Desconhecido (…123456)");
+  assert.equal(resolveUserName("", um), "Desconhecido");
+  assert.equal(resolveUserName(undefined, um), "Desconhecido");
+});
+
+test("stepSelection usa a identidade e não o índice", () => {
+  const a = { id: "a" }, b = { id: "b" }, c = { id: "c" };
+  assert.equal(stepSelection([a, b, c], b, 1), c);
+  assert.equal(stepSelection([a, b, c], b, -1), a);
+  assert.equal(stepSelection([a, b, c], c, 1), null);   // não passa do último
+  assert.equal(stepSelection([a, b, c], a, -1), null);  // nem do primeiro
+  assert.equal(stepSelection([c, b, a], b, 1), a);      // lista redesenhada: segue a ordem nova
+});
+
+test("stepSelection fora da lista: ↓ vai ao primeiro, ↑ ao último", () => {
+  const a = { id: "a" }, b = { id: "b" }, sumiu = { id: "x" };
+  assert.equal(stepSelection([a, b], sumiu, 1), a);
+  assert.equal(stepSelection([a, b], sumiu, -1), b);
+  assert.equal(stepSelection([], sumiu, 1), null);
+});
+
+test("ignoresArrowKeys: campos de texto e selects ficam com as setas", () => {
+  for (const t of ["INPUT", "SELECT", "TEXTAREA", "input"]) assert.equal(ignoresArrowKeys(t), true, t);
+  for (const t of ["BODY", "TR", "BUTTON", "DIALOG", ""]) assert.equal(ignoresArrowKeys(t), false, t);
+});
+
+test("esc fecha o que abriu por último (seletor antes da gaveta)", () => {
+  assert.equal(escTarget({ pickerOpen: true, drawerOpen: true }), "picker");
+  assert.equal(escTarget({ pickerOpen: false, drawerOpen: true }), "drawer");
+  assert.equal(escTarget({ pickerOpen: true, drawerOpen: false }), "picker");
+  assert.equal(escTarget({ pickerOpen: false, drawerOpen: false }), null);
+});
+
+test("popoverPosition ancora abaixo do campo e não sai da janela", () => {
+  const vp = { width: 1280, height: 800 }, pop = { width: 560, height: 360 };
+  assert.deepEqual(popoverPosition({ field: { left: 100, bottom: 120 }, pop, viewport: vp }), { top: 126, left: 100 });
+  assert.deepEqual(popoverPosition({ field: { left: 900, bottom: 120 }, pop, viewport: vp }), { top: 126, left: 712 }); // 1280 − 560 − 8
+  assert.deepEqual(popoverPosition({ field: { left: -20, bottom: 120 }, pop, viewport: vp }), { top: 126, left: 8 });
 });
 
 test("pickerLayout: fronteiras dos dois breakpoints do HA", () => {
