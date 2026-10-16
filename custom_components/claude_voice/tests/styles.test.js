@@ -71,17 +71,26 @@ test("CSS respeita prefers-reduced-motion", () => {
 });
 
 test("folhas do celular: dialog modal a 90% da altura visível, presas ao rodapé", () => {
-  assert.match(CSS, /\.jl \.detail:modal, \.jl \.rp-sheet:modal\s*\{[^}]*height:\s*90dvh/);
+  const q = MOBILE_QUERY.replace(/[()]/g, "\\$&");
+  assert.match(CSS, /\.jl \.rp-sheet:modal\s*\{[^}]*height:\s*90dvh/);
+  assert.match(CSS, new RegExp(`@media ${q}\\s*\\{[\\s\\S]*?\\.jl \\.detail:modal\\s*\\{[^}]*height:\\s*90dvh`));
   assert.ok(CSS.includes("::backdrop"), "o fundo escuro vem do ::backdrop");
 });
 
-test("gaveta do desktop: popover aberto à direita, do topo ao rodapé, sem fundo", () => {
-  assert.match(CSS, /\.jl \.detail:popover-open\s*\{[^}]*width:\s*min\(480px,\s*40vw\)/);
-  assert.match(CSS, /\.jl \.detail:popover-open\s*\{[^}]*height:\s*100dvh/);
+test("gaveta do desktop: dialog modal à direita, do topo ao rodapé, com fundo (clique fora fecha)", () => {
+  assert.match(CSS, /\.jl \.detail:modal\s*\{[^}]*width:\s*min\(480px,\s*40vw\)/);
+  assert.match(CSS, /\.jl \.detail:modal\s*\{[^}]*height:\s*100dvh/);
+  assert.ok(!CSS.includes(".detail:popover-open"), "a gaveta não é mais popover");
+});
+
+test("respeita o notch/safe area do iPhone (deitado e no rodapé das folhas)", () => {
+  assert.match(CSS, /\.jl\s*\{[^}]*padding-left:\s*env\(safe-area-inset-left\)/);
+  assert.match(CSS, /\.jl\s*\{[^}]*padding-right:\s*env\(safe-area-inset-right\)/);
+  assert.match(CSS, /\.jl \.sheet-body\s*\{[^}]*env\(safe-area-inset-bottom\)/);
 });
 
 test("dialog/popover fechado continua escondido mesmo com display do autor", () => {
-  assert.match(CSS, /\.jl dialog:not\(\[open\]\):not\(:popover-open\)[^{]*\{[^}]*display:\s*none/);
+  assert.match(CSS, /\.jl dialog:not\(\[open\]\)\s*\{[^}]*display:\s*none/);
   assert.match(CSS, /\.jl \.rp-pop:not\(:popover-open\)\s*\{[^}]*display:\s*none/);
 });
 

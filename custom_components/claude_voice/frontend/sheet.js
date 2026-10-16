@@ -24,8 +24,14 @@ function ligar(el) {
   });
   // O conteúdo vive num único .sheet-body que ocupa a folha inteira: um clique
   // cujo alvo é o próprio <dialog> só pode ter vindo do ::backdrop.
+  // Só fecha se o gesto também COMEÇOU no fundo: selecionar texto arrastando
+  // até a faixa escura gera um click no ancestral comum (o <dialog>).
+  let inicio = null;
+  el.addEventListener("pointerdown", (e) => { inicio = e.target; });
   el.addEventListener("click", (e) => {
-    if (e.target === el && atual && atual.el === el) closeSheet();
+    const doFundo = e.target === el && (inicio === null || inicio === el);
+    inicio = null;
+    if (doFundo && atual && atual.el === el) closeSheet();
   });
 }
 
@@ -51,45 +57,49 @@ export function closeSheet() {
   if (onClose) onClose();
 }
 
-// Mudança de regime (folha -> gaveta): solta o estado compartilhado e fecha o
-// modal SEM disparar onClose — o detalhe reabre como gaveta com a seleção
-// intacta. Fechar de verdade seria perda de trabalho; não soltar deixaria a
-// trava de scroll presa no <html>, que é do HA inteiro. Só age se `el` for
-// MESMO a folha corrente.
-export function releaseSheet(el) {
-  if (!atual || atual.el !== el) return;
-  atual = null;
-  el.style.transform = "";
-  el.style.transition = "";
-  if (el.open) el.close();
-  document.documentElement.classList.remove("jl-sheet-open");
-}
-
-// Arrastar a alça para baixo dispensa a folha. Sem alça, não há gesto.
-// Exportado: consumidores cujo miolo reescreve o innerHTML depois de abrir
-// (ex.: RangePicker ao navegar de mês) trocam a .d-grip por um nó novo, sem os
-// handlers — precisam poder rechamar isto após cada re-render.
+// Arrastar para baixo dispensa a folha: pela alça ou por qualquer ponto do
+// conteúdo, desde que ele esteja rolado até o topo (como as folhas nativas).
+// O touchmove faz preventDefault enquanto o gesto é da folha; sem isso, puxar
+// a folha para baixo virava o pull-to-refresh da página (recarregava o HA).
+// Handlers por propriedade no próprio <dialog> (não passivos, e sobrevivem ao
+// innerHTML do conteúdo). Gaveta (não ocupa a largura toda) não arrasta.
 export function bindSheetDrag(el) {
-  const grip = el.querySelector(".d-grip");
-  if (!grip) return;
   let inicioY = null;
   let dy = 0;
-  grip.ontouchstart = (e) => {
+  let arrastando = false;
+  const corpo = () => el.querySelector(".sheet-body");
+  el.ontouchstart = (e) => {
+    inicioY = null;
     if (!e.touches || !e.touches.length) return;
+    if (el.getBoundingClientRect().width < window.innerWidth - 1) return;
     inicioY = e.touches[0].clientY;
     dy = 0;
-    el.style.transition = "none";
+    arrastando = false;
   };
-  grip.ontouchmove = (e) => {
+  el.ontouchmove = (e) => {
     if (inicioY == null || !e.touches || !e.touches.length) return;
     dy = e.touches[0].clientY - inicioY;
-    if (dy > 0) el.style.transform = `translateY(${dy}px)`;
+    if (!arrastando) {
+      const c = corpo();
+      if (dy > 0 && (!c || c.scrollTop <= 0)) {
+        arrastando = true;
+        el.style.transition = "none";
+      } else {
+        inicioY = null;   // gesto de rolagem do conteúdo: não é da folha
+        return;
+      }
+    }
+    e.preventDefault();
+    el.style.transform = `translateY(${Math.max(0, dy)}px)`;
   };
-  grip.ontouchend = () => {
-    el.style.transition = "";
-    if (dy > 90) closeSheet();
-    else el.style.transform = "";
+  el.ontouchend = () => {
+    if (arrastando) {
+      el.style.transition = "";
+      if (dy > 90) closeSheet();
+      else el.style.transform = "";
+    }
     inicioY = null;
     dy = 0;
+    arrastando = false;
   };
 }

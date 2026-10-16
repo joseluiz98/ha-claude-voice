@@ -1,5 +1,5 @@
 import { localISODate, monthMatrix, presetRange, pickerLayout, PICKER_BREAKPOINTS, popoverPosition } from "./format.js";
-import { openSheet, closeSheet, currentSheetEl, bindSheetDrag } from "./sheet.js";
+import { openSheet, closeSheet, currentSheetEl } from "./sheet.js";
 
 const PRESETS = [
   ["today", "Hoje"], ["yesterday", "Ontem"], ["week", "Esta semana"],
@@ -166,12 +166,6 @@ export class RangePicker {
     // com alvo no próprio <dialog> = backdrop). No popover fica solto.
     alvo.innerHTML = comAlca ? `<div class="sheet-body"><div class="d-grip"></div>${miolo}</div>` : miolo;
     this._ligar(alvo);
-    // _renderConteudo() reescreve alvo.innerHTML por inteiro — inclusive numa
-    // navegação de mês ou no 1º clique de um novo range — o que troca o nó
-    // .d-grip e derruba os handlers de touch que o openSheet() ligou na
-    // abertura. Rebind idempotente: sem custo perceptível, e sem isto o
-    // arrastar-para-fechar morre no primeiro re-render.
-    if (comAlca) bindSheetDrag(alvo);
   }
 
   _ligar(alvo) {

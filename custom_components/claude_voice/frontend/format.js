@@ -122,8 +122,8 @@ export function shouldShowMenu({ narrow, dockedSidebar }) {
 }
 
 // Regime "celular" do detalhe e do header (spec 2026-10-16 §4.1): largura OU
-// altura baixa (celular deitado). styles.js (@media) e o matchMedia do detalhe
-// importam MOBILE_QUERY daqui. O seletor de datas tem limiares próprios
+// altura baixa (celular deitado). styles.js (@media) importa MOBILE_QUERY daqui;
+// detailLayout() é a mesma regra no JS. O seletor de datas tem limiares próprios
 // (PICKER_BREAKPOINTS, abaixo) e não entra nesta conta.
 export const MOBILE_MAX_WIDTH = 760;
 export const MOBILE_MAX_HEIGHT = 500;
@@ -166,12 +166,6 @@ export function keyTargetsPanel(path, panel) {
 // ignora. No celular nada é fixo.
 export function stickyScrollMargin({ drawer, toolbarBottom }) {
   return drawer ? Math.max(0, Math.ceil(toolbarBottom)) : 0;
-}
-
-// Esc fecha o que abriu por último: o seletor abre por cima da gaveta.
-export function escTarget({ pickerOpen, drawerOpen }) {
-  if (pickerOpen) return "picker";
-  return drawerOpen ? "drawer" : null;
 }
 
 // Posição (position: fixed) do popover do seletor: abaixo do campo, sem sair da janela.

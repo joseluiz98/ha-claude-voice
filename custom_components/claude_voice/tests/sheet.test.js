@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test, beforeEach } from "node:test";
-import { openSheet, closeSheet, currentSheetEl, releaseSheet } from "../frontend/sheet.js";
+import { openSheet, closeSheet, currentSheetEl } from "../frontend/sheet.js";
 
 function fakeEl() {
   const ouvintes = {};
@@ -11,11 +11,22 @@ function fakeEl() {
     close() { this.open = false; },
     addEventListener(tipo, fn) { (ouvintes[tipo] = ouvintes[tipo] || []).push(fn); },
     dispara(tipo, ev) { (ouvintes[tipo] || []).forEach((fn) => fn(ev)); },
-    querySelector: () => null,   // sem .d-grip: bindSheetDrag sai cedo
+    querySelector: () => null,
+    getBoundingClientRect: () => ({ width: 390 }),
   };
 }
 
+// folha com conteúdo rolável (.sheet-body) para o gesto de arrastar
+function fakeFolha(scrollTop = 0) {
+  const el = fakeEl();
+  const corpo = { scrollTop };
+  el.querySelector = (s) => (s === ".sheet-body" ? corpo : null);
+  return el;
+}
+function toque(y) { return { touches: [{ clientY: y }] }; }
+
 beforeEach(() => {
+  globalThis.window = { innerWidth: 390 };
   const raiz = new Set();
   globalThis.document = {
     documentElement: {
@@ -99,23 +110,56 @@ test("abrir a mesma folha aberta de novo não lança (showModal só se fechada)"
   assert.equal(el.open, true);
 });
 
-test("troca de regime com o detalhe aberto: release e reabertura", () => {
-  const el = fakeEl(); let fechou = 0;
-  openSheet({ el, onClose: () => fechou++ });
-  releaseSheet(el);
+test("arrastar selecionando texto e soltar no fundo não fecha (o clique nasceu no conteúdo)", () => {
+  const el = fakeEl();
+  openSheet({ el });
+  el.dispara("pointerdown", { target: { nome: "texto" } });
+  el.dispara("click", { target: el });
+  assert.equal(el.open, true);
+  el.dispara("pointerdown", { target: el });
+  el.dispara("click", { target: el });
   assert.equal(el.open, false);
-  assert.equal(fechou, 0);                       // a seleção do usuário não é limpa
-  assert.equal(currentSheetEl(), null);
-  assert.equal(document.documentElement.classList.contains("jl-sheet-open"), false);
-  openSheet({ el });                             // voltar ao regime folha reabre sem erro
+});
+
+test("puxar a folha para baixo com o conteúdo no topo fecha e bloqueia o pull-to-refresh", () => {
+  const el = fakeFolha(0); let bloqueou = 0;
+  openSheet({ el });
+  el.ontouchstart(toque(100));
+  el.ontouchmove({ ...toque(160), preventDefault: () => bloqueou++ });
+  el.ontouchmove({ ...toque(250), preventDefault: () => bloqueou++ });
+  assert.equal(el.style.transform, "translateY(150px)");
+  el.ontouchend({});
+  assert.equal(bloqueou, 2, "o gesto é da folha, não do navegador");
+  assert.equal(el.open, false);
+});
+
+test("puxar pouco devolve a folha ao lugar", () => {
+  const el = fakeFolha(0);
+  openSheet({ el });
+  el.ontouchstart(toque(100));
+  el.ontouchmove({ ...toque(140), preventDefault() {} });
+  el.ontouchend({});
+  assert.equal(el.open, true);
+  assert.equal(el.style.transform, "");
+});
+
+test("com o conteúdo rolado, puxar para baixo rola o conteúdo e não arrasta a folha", () => {
+  const el = fakeFolha(300); let bloqueou = 0;
+  openSheet({ el });
+  el.ontouchstart(toque(100));
+  el.ontouchmove({ ...toque(250), preventDefault: () => bloqueou++ });
+  el.ontouchend({});
+  assert.equal(bloqueou, 0);
   assert.equal(el.open, true);
 });
 
-test("release de quem não é a folha corrente é no-op", () => {
-  const a = fakeEl(); const b = fakeEl();
-  openSheet({ el: a });
-  releaseSheet(b);
-  assert.equal(currentSheetEl(), a, "a folha alheia continua registrada");
-  assert.equal(a.open, true);
-  assert.equal(document.documentElement.classList.contains("jl-sheet-open"), true);
+test("gaveta (não ocupa a largura toda) não arrasta", () => {
+  const el = fakeFolha(0);
+  el.getBoundingClientRect = () => ({ width: 480 });
+  globalThis.window.innerWidth = 1280;
+  openSheet({ el });
+  el.ontouchstart(toque(100));
+  el.ontouchmove({ ...toque(250), preventDefault() {} });
+  el.ontouchend({});
+  assert.equal(el.open, true);
 });

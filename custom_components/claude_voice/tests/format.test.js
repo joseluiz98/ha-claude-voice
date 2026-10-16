@@ -3,7 +3,7 @@ import { test } from "node:test";
 import {
   resolveUserName, fmtDuration, localISODate, applyFilters, computeStats, groupByThread,
   presetRange, monthMatrix, shouldShowMenu, pickerLayout, PICKER_BREAKPOINTS,
-  detailLayout, MOBILE_QUERY, stepSelection, ignoresArrowKeys, escTarget, popoverPosition,
+  detailLayout, MOBILE_QUERY, stepSelection, ignoresArrowKeys, popoverPosition,
   stickyScrollMargin, keyTargetsPanel,
 } from "../frontend/format.js";
 
@@ -131,13 +131,6 @@ test("stepSelection fora da lista: ↓ vai ao primeiro, ↑ ao último", () => {
 test("ignoresArrowKeys: campos de texto e selects ficam com as setas", () => {
   for (const t of ["INPUT", "SELECT", "TEXTAREA", "input"]) assert.equal(ignoresArrowKeys(t), true, t);
   for (const t of ["BODY", "TR", "BUTTON", "DIALOG", ""]) assert.equal(ignoresArrowKeys(t), false, t);
-});
-
-test("esc fecha o que abriu por último (seletor antes da gaveta)", () => {
-  assert.equal(escTarget({ pickerOpen: true, drawerOpen: true }), "picker");
-  assert.equal(escTarget({ pickerOpen: false, drawerOpen: true }), "drawer");
-  assert.equal(escTarget({ pickerOpen: true, drawerOpen: false }), "picker");
-  assert.equal(escTarget({ pickerOpen: false, drawerOpen: false }), null);
 });
 
 test("popoverPosition ancora abaixo do campo e não sai da janela", () => {

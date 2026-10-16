@@ -28,6 +28,9 @@ export const CSS = `
           color: var(--jl-text);
           font-size: var(--jl-fs);
           animation: jl-fade .32s ease both;
+          /* notch do iPhone deitado: viewport-fit=cover no HA, então quem
+             respeita a área segura é a página (0 onde não há notch) */
+          padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right);
         }
         @keyframes jl-fade { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
         /* Içado para fora de qualquer @media: keyframes só produzem efeito onde
@@ -264,10 +267,11 @@ export const CSS = `
              resposta continua a um toque no detalhe. */
           .jl .c-resp { display: none; }
         }
-        /* Spec 2026-10-16: folhas e gaveta vivem na camada superior (<dialog>
-           modal / popover manual). Lá nenhum ancestral com transform ou
-           backdrop-filter prende o position:fixed, e o scroll da página não
-           mexe na posição — era o que escondia a folha com listas longas. */
+        /* Spec 2026-10-16: folhas e gaveta são <dialog> modais na camada
+           superior. Lá nenhum ancestral com transform ou backdrop-filter prende
+           o position:fixed, e o scroll da página não mexe na posição — era o
+           que escondia a folha com listas longas. O ::backdrop escurece e o
+           clique nele fecha (sheet.js). */
         :root.jl-sheet-open, html.jl-sheet-open body { overflow: hidden !important; }
 
         .jl dialog.detail, .jl dialog.rp-sheet {
@@ -276,38 +280,39 @@ export const CSS = `
           color: var(--jl-text); background: var(--jl-surface);
         }
         /* o display do autor venceria o display:none do user agent */
-        .jl dialog:not([open]):not(:popover-open) { display: none; }
+        .jl dialog:not([open]) { display: none; }
         .jl .sheet-body {
           box-sizing: border-box; height: 100%; overflow: auto; overscroll-behavior: contain;
-          padding: 8px 18px 20px;
+          padding: 8px max(18px, env(safe-area-inset-right)) calc(20px + env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
         }
+        /* alça: 4px visíveis, mas o arrasto vale para o topo inteiro da folha
+           (sheet.js), então ela é só a pista visual */
         .jl .d-grip {
           display: block; width: 40px; height: 4px; margin: 4px auto 12px;
           border-radius: 999px; background: var(--jl-border); touch-action: none;
         }
 
-        /* Folha (celular): sempre 90% da altura visível, presa ao rodapé. */
-        .jl .detail:modal, .jl .rp-sheet:modal {
+        /* Folha do seletor: sempre 90% da altura visível, presa ao rodapé. */
+        .jl .rp-sheet:modal {
           position: fixed; inset: auto 0 0 0; width: 100%;
           height: 90vh; height: 90dvh;
           border-radius: 18px 18px 0 0; box-shadow: 0 -10px 40px -10px rgba(0,0,0,.5);
           /* backwards, não both: "both" prende transform:none depois da
-             animação e o arrasto da alça (sheet.js) deixa de acompanhar o dedo. */
+             animação e o arrasto (sheet.js) deixa de acompanhar o dedo. */
           animation: jl-sheet .22s ease backwards;
         }
         .jl .detail::backdrop, .jl .rp-sheet::backdrop { background: rgba(0,0,0,.5); }
 
-        /* Gaveta (desktop): do topo ao rodapé, à direita, sem fundo escuro; a
-           tabela atrás continua com a largura toda e clicável. O display:block
-           explícito não depende de o user agent liberar <dialog popover>. */
-        .jl .detail:popover-open {
-          display: block;
+        /* Detalhe no desktop = gaveta: do topo ao rodapé, à direita. No regime
+           celular (abaixo) o mesmo <dialog> vira folha; trocar de regime com
+           ele aberto é só CSS. */
+        .jl .detail:modal {
           position: fixed; inset: 0 0 0 auto; width: min(480px, 40vw);
           height: 100vh; height: 100dvh;
           border-left: 1px solid var(--jl-border); box-shadow: -14px 0 40px -18px rgba(0,0,0,.45);
           animation: jl-slide .2s ease both;
         }
-        .jl .detail:popover-open .d-grip { display: none; }
+        .jl .detail:modal .d-grip { display: none; }
 
         /* Popover do seletor (desktop): posição vem do JS (popoverPosition). */
         .jl .rp-pop:popover-open {
@@ -317,6 +322,13 @@ export const CSS = `
 
         @media ${MOBILE_QUERY} {
           .jl .jl-hdr, .jl .toolbar { position: static; }
+          .jl .detail:modal {
+            inset: auto 0 0 0; width: 100%;
+            height: 90vh; height: 90dvh;
+            border-left: none; border-radius: 18px 18px 0 0; box-shadow: 0 -10px 40px -10px rgba(0,0,0,.5);
+            animation: jl-sheet .22s ease backwards;
+          }
+          .jl .detail:modal .d-grip { display: block; }
           .jl .detail #jl-close { width: 40px; height: 40px; font-size: var(--jl-fs-xl); }
         }
         .jl .detail .d-trace {
