@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CSS } from "../frontend/styles.js";
+import { MOBILE_QUERY } from "../frontend/format.js";
 
 test("CSS é uma string e não carrega as tags <style>", () => {
   assert.equal(typeof CSS, "string");
@@ -67,4 +68,48 @@ test("CSS respeita prefers-reduced-motion", () => {
     CSS.includes("prefers-reduced-motion"),
     "o painel tem uma animação infinita (jl-pulse) e precisa da guarda"
   );
+});
+
+test("folhas do celular: dialog modal a 90% da altura visível, presas ao rodapé", () => {
+  const q = MOBILE_QUERY.replace(/[()]/g, "\\$&");
+  assert.match(CSS, /\.jl \.rp-sheet:modal\s*\{[^}]*height:\s*90dvh/);
+  assert.match(CSS, new RegExp(`@media ${q}\\s*\\{[\\s\\S]*?\\.jl \\.detail:modal\\s*\\{[^}]*height:\\s*90dvh`));
+  assert.ok(CSS.includes("::backdrop"), "o fundo escuro vem do ::backdrop");
+});
+
+test("gaveta do desktop: dialog modal à direita, do topo ao rodapé, com fundo (clique fora fecha)", () => {
+  assert.match(CSS, /\.jl \.detail:modal\s*\{[^}]*width:\s*min\(480px,\s*40vw\)/);
+  assert.match(CSS, /\.jl \.detail:modal\s*\{[^}]*height:\s*100dvh/);
+  assert.ok(!CSS.includes(".detail:popover-open"), "a gaveta não é mais popover");
+});
+
+test("notch: o HA (>= 2026.8) já recua o painel; o .jl não soma outro recuo", () => {
+  // ha-panel-custom põe padding com --safe-area-content-inset-*; somar env() aqui dobrava o deslize
+  assert.ok(!/\.jl\s*\{[^}]*safe-area/.test(CSS));
+});
+
+test("notch nas folhas (top layer, fora do padding do HA): variáveis do HA, que o app iOS atualiza ao girar", () => {
+  assert.match(CSS, /\.jl \.sheet-body\s*\{[^}]*var\(--safe-area-inset-left, env\(safe-area-inset-left\)\)/);
+  assert.match(CSS, /\.jl \.sheet-body\s*\{[^}]*var\(--safe-area-inset-right, env\(safe-area-inset-right\)\)/);
+  assert.match(CSS, /\.jl \.sheet-body\s*\{[^}]*var\(--safe-area-inset-bottom, env\(safe-area-inset-bottom\)\)/);
+});
+
+test("dialog/popover fechado continua escondido mesmo com display do autor", () => {
+  assert.match(CSS, /\.jl dialog:not\(\[open\]\)\s*\{[^}]*display:\s*none/);
+  assert.match(CSS, /\.jl \.rp-pop:not\(:popover-open\)\s*\{[^}]*display:\s*none/);
+});
+
+test("header e toolbar deixam de ser fixos no regime celular", () => {
+  const q = MOBILE_QUERY.replace(/[()]/g, "\\$&");
+  assert.match(CSS, new RegExp(`@media ${q}\\s*\\{[\\s\\S]*?\\.jl \\.jl-hdr, \\.jl \\.toolbar\\s*\\{[^}]*position:\\s*static`));
+});
+
+test("o scrim antigo e a coluna sticky do detalhe saíram", () => {
+  assert.ok(!CSS.includes(".scrim"), "o #jl-scrim não existe mais");
+  assert.ok(!CSS.includes("jl-rp-sheet-open"), "a trava de scroll é uma só (jl-sheet-open)");
+  assert.ok(!/\.jl \.detail\s*\{[^}]*position:\s*sticky/.test(CSS), "o detalhe não é mais coluna sticky");
+});
+
+test("nenhum overflow-x em .jl (armadilha registrada)", () => {
+  assert.ok(!/\.jl\s*\{[^}]*overflow-x/.test(CSS));
 });

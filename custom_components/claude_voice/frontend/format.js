@@ -1,7 +1,14 @@
+// Rótulo da coluna Usuário (spec 2026-10-16 §4.5), sem tocar no log: o mapa
+// user_names manda; depois as origens da F.R.I.D.A.Y.; chaves legíveis de
+// automação do CV; e por fim o desconhecido.
 export function resolveUserName(sessionKey, userNames = {}) {
   if (!sessionKey) return "Desconhecido";
   if (userNames && userNames[sessionKey]) return userNames[sessionKey];
-  return "Desconhecido (…" + String(sessionKey).slice(-6) + ")";
+  const k = String(sessionKey);
+  if (k === "friday-pagina") return "Friday · página";
+  if (k.startsWith("friday-satelite-")) return "Friday · satélite " + k.slice("friday-satelite-".length);
+  if (!k.startsWith("amzn1.")) return "CV · " + k;
+  return "Desconhecido (…" + k.slice(-6) + ")";
 }
 
 export function fmtDuration(ms) {
@@ -114,19 +121,57 @@ export function shouldShowMenu({ narrow, dockedSidebar }) {
   return Boolean(narrow) || dockedSidebar === "always_hidden";
 }
 
-// Limiar único do detalhe do registro. O CSS transforma o .detail em folha
-// (fixed no rodapé, com alça e scrim) apenas dentro de @media (max-width:760px);
-// acima disso ele é coluna lateral sticky. Quem decide isso no JS precisa usar
-// ESTE número, e não os limiares do picker (870/500): eram regimes diferentes
-// tratados como um só, e por isso abrir o seletor de datas na faixa 761–870px
-// (ou em qualquer largura com altura ≤500px, um DevTools ancorado embaixo)
-// fechava a coluna de detalhe e limpava a seleção do usuário.
-export const DETAIL_SHEET_MAX_WIDTH = 760;
+// Regime "celular" do detalhe e do header (spec 2026-10-16 §4.1): largura OU
+// altura baixa (celular deitado). styles.js (@media) importa MOBILE_QUERY daqui;
+// detailLayout() é a mesma regra no JS. O seletor de datas tem limiares próprios
+// (PICKER_BREAKPOINTS, abaixo) e não entra nesta conta.
+export const MOBILE_MAX_WIDTH = 760;
+export const MOBILE_MAX_HEIGHT = 500;
+export const MOBILE_QUERY = `(max-width: ${MOBILE_MAX_WIDTH}px), (max-height: ${MOBILE_MAX_HEIGHT}px)`;
 
-// "sheet" = participa do mecanismo de folha (scrim, trava de scroll, exclusão
-// mútua, gesto de arrastar). "column" = só aparece; não toca em estado nenhum.
-export function detailLayout({ width }) {
-  return width <= DETAIL_SHEET_MAX_WIDTH ? "sheet" : "column";
+// "sheet" = folha modal (celular). "drawer" = gaveta lateral (desktop).
+export function detailLayout({ width, height }) {
+  return width <= MOBILE_MAX_WIDTH || height <= MOBILE_MAX_HEIGHT ? "sheet" : "drawer";
+}
+
+// Próximo registro na ordem VISÍVEL, achado pela identidade do objeto (a lista
+// pode ser redesenhada por registro novo ou filtro). Fora da lista: ↓ vai ao
+// primeiro e ↑ ao último. Nas pontas, null (não dá a volta).
+export function stepSelection(order, current, delta) {
+  if (!order.length) return null;
+  const i = order.indexOf(current);
+  if (i < 0) return delta > 0 ? order[0] : order[order.length - 1];
+  return order[i + delta] || null;
+}
+
+// Campos de texto e selects ficam com as setas; checkbox, radio e botão (que
+// também são INPUT/BUTTON e ficam com o foco depois do clique) não.
+export function ignoresArrowKeys(tagName, type) {
+  const tag = String(tagName).toUpperCase();
+  if (tag === "INPUT") return !["checkbox", "radio", "button"].includes(String(type || "").toLowerCase());
+  return tag === "SELECT" || tag === "TEXTAREA";
+}
+
+// O teclado da gaveta escuta o document inteiro; só age em teclas do próprio
+// painel (ou com o foco solto no documento), nunca nas de um diálogo do HA nem
+// da sidebar. `path` = e.composedPath().
+export function keyTargetsPanel(path, panel) {
+  if (!path || !path.length) return false;
+  if (path.includes(panel)) return true;
+  return ["BODY", "HTML"].includes(String(path[0].tagName).toUpperCase());
+}
+
+// scroll-margin-top da linha selecionada pelas setas: no desktop o header e a
+// toolbar são sticky e cobrem o topo da área de rolagem, que o scrollIntoView
+// ignora. No celular nada é fixo.
+export function stickyScrollMargin({ drawer, toolbarBottom }) {
+  return drawer ? Math.max(0, Math.ceil(toolbarBottom)) : 0;
+}
+
+// Posição (position: fixed) do popover do seletor: abaixo do campo, sem sair da janela.
+export function popoverPosition({ field, pop, viewport, gap = 6 }) {
+  const left = Math.max(8, Math.min(field.left, viewport.width - pop.width - 8));
+  return { top: field.bottom + gap, left };
 }
 
 // Fonte única dos limiares do picker. range-picker.js monta suas media queries
